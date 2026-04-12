@@ -22,7 +22,7 @@ import {
 import { supabaseAdmin, type KnowledgeBase } from '@/lib/supabase'
 import Header from '@/components/layout/Header'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
+const API_URL = '/api/backend'
 
 type SearchResult = {
   id: string

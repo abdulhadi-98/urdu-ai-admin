@@ -1,24 +1,47 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { config } from './config'
 
-// In the browser: route through our Next.js HTTPS proxy (/api/sb/...)
-// On the server / at build time: hit Supabase directly over HTTP
-const supabaseUrl =
+// Browser: proxy through /api/sb (HTTPS, avoids mixed content)
+// Server/build: direct HTTP URL
+const getUrl = () =>
   typeof window === 'undefined'
     ? process.env.SUPABASE_URL || 'http://localhost:54321'
     : window.location.origin + '/api/sb'
 
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
-const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY || 'placeholder-service-key'
+// Lazy singletons — keys are read at call time from window.__APP_CONFIG__
+let _admin: SupabaseClient | null = null
+let _public: SupabaseClient | null = null
 
-// Public client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
+export function getSupabaseAdmin(): SupabaseClient {
+  if (!_admin) {
+    _admin = createClient(getUrl(), config.supabaseServiceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { params: { eventsPerSecond: -1 } },
+    })
+  }
+  return _admin
+}
+
+export function getSupabase(): SupabaseClient {
+  if (!_public) {
+    _public = createClient(getUrl(), config.supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+  }
+  return _public
+}
+
+// Keep named exports for backwards compat — these resolve lazily
+export const supabaseAdmin = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return (getSupabaseAdmin() as any)[prop]
+  },
 })
 
-// Service-role client for admin operations (realtime disabled — WebSocket can't go through proxy)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-  realtime: { params: { eventsPerSecond: -1 } },
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_, prop) {
+    return (getSupabase() as any)[prop]
+  },
 })
 
 export type Conversation = {

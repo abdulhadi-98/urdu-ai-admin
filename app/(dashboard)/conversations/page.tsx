@@ -21,7 +21,7 @@ import AudioPlayer from '@/components/AudioPlayer'
 import Header from '@/components/layout/Header'
 import { getInitials, getAvatarColor, formatPhone } from '@/lib/utils'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
+const API_URL = '/api/backend'
 
 type ContactThread = {
   phone: string

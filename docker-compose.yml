@@ -5,19 +5,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        # Only API keys are baked into the JS bundle at build time
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-        NEXT_PUBLIC_SUPABASE_SERVICE_KEY: ${NEXT_PUBLIC_SUPABASE_SERVICE_KEY}
-    environment:
-      # SUPABASE_URL is read server-side by the /api/sb proxy — HTTP is fine here
-      SUPABASE_URL: ${SUPABASE_URL}
     image: urdu-ai-admin:latest
     container_name: urdu-ai-admin
     restart: unless-stopped
     expose:
       - "3000"
+    environment:
+      # All vars are runtime — no build-time baking needed
+      API_URL: ${API_URL}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
     networks:
       - traefik-public
     labels:

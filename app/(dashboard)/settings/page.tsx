@@ -22,9 +22,10 @@ export default function SettingsPage() {
   const [showAnonKey, setShowAnonKey] = useState(false)
   const [showServiceKey, setShowServiceKey] = useState(false)
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
-  const serviceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY ?? ''
+  const cfg = typeof window !== 'undefined' ? (window as any).__APP_CONFIG__ ?? {} : {}
+  const apiUrl: string = cfg.apiUrl || ''
+  const anonKey: string = cfg.supabaseAnonKey || ''
+  const serviceKey: string = cfg.supabaseServiceKey || ''
 
   const maskKey = (key: string) => {
     if (!key) return 'Not configured'

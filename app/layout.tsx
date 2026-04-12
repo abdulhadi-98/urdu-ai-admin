@@ -14,8 +14,22 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  // Inject runtime config — read from server-side env vars (set in Dokploy UI)
+  const config = {
+    apiUrl: process.env.API_URL || '',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
+    supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY || '',
+  }
+
   return (
     <html lang="en" className="dark">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.__APP_CONFIG__ = ${JSON.stringify(config)}`,
+          }}
+        />
+      </head>
       <body className={`${inter.className} bg-dark-900 text-white antialiased`}>
         {children}
       </body>

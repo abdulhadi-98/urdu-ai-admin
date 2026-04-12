@@ -19,7 +19,7 @@ import { supabaseAdmin, type Notification } from '@/lib/supabase'
 import Header from '@/components/layout/Header'
 import { formatPhone } from '@/lib/utils'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000'
+const API_URL = '/api/backend'
 
 const PRIORITY_CONFIG = {
   urgent: { label: 'Urgent', color: 'bg-red-500/15 text-red-400 border-red-500/20' },
