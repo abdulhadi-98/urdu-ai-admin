@@ -2,20 +2,23 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   AreaChart,
   Area,
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   Legend,
+  ComposedChart,
+  Line,
 } from 'recharts'
-import { format, subDays, parseISO, isAfter } from 'date-fns'
+import { format, subDays, parseISO, subMonths, startOfMonth } from 'date-fns'
 import {
   MessageSquare,
   Mic,
@@ -24,71 +27,87 @@ import {
   TrendingUp,
   Users,
   Zap,
-  RefreshCw,
+  BarChart2,
+  Calendar,
+  Flame,
 } from 'lucide-react'
-import { supabaseAdmin, type Conversation } from '@/lib/supabase'
+import { supabaseAdmin, type Conversation, type AnalyticsEvent } from '@/lib/supabase'
 import StatCard from '@/components/StatCard'
 import Header from '@/components/layout/Header'
 import { getInitials, getAvatarColor, formatPhone } from '@/lib/utils'
 
-const COLORS = {
-  messages: '#6366f1',
-  voice: '#22c55e',
-  escalations: '#f59e0b',
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const HOURS = Array.from({ length: 24 }, (_, i) =>
+  i === 0 ? '12a' : i < 12 ? `${i}a` : i === 12 ? '12p' : `${i - 12}p`
+)
+
+const CHANNEL_COLORS: Record<string, string> = {
+  facebook: '#1877f2',
+  google: '#34a853',
+  instagram: '#e1306c',
+  referral: '#f59e0b',
+  olx: '#6366f1',
+  zameen: '#10b981',
+  whatsapp: '#25d366',
+  other: '#6b7280',
+  unknown: '#374151',
+}
+
+function channelColor(src: string) {
+  const key = src.toLowerCase()
+  return CHANNEL_COLORS[key] ?? CHANNEL_COLORS.other
 }
 
 export default function DashboardPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
+  const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
-      const { data, error } = await supabaseAdmin
-        .from('conversations')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setConversations(data ?? [])
+      const [convRes, evtRes] = await Promise.all([
+        supabaseAdmin
+          .from('conversations')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabaseAdmin
+          .from('analytics_events')
+          .select('id,event_type,lead_source,created_at,phone')
+          .order('created_at', { ascending: false }),
+      ])
+      if (!convRes.error) setConversations(convRes.data ?? [])
+      if (!evtRes.error) setAnalyticsEvents(evtRes.data ?? [])
     } catch (err) {
-      console.error('Failed to fetch conversations:', err)
+      console.error('Failed to fetch data:', err)
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
   }, [])
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  useEffect(() => { fetchData() }, [fetchData])
 
-  const handleRefresh = () => {
-    setRefreshing(true)
-    fetchData()
-  }
+  const handleRefresh = () => { setRefreshing(true); fetchData() }
 
-  // Stats
+  // ── Core stats ───────────────────────────────────────────────────────────────
   const totalMessages = conversations.length
   const voiceMessages = conversations.filter((c) => c.is_voice).length
   const escalations = conversations.filter((c) => c.needs_human).length
-  const avgResponseTime = conversations.length
+  const avgResponseTime = conversations.filter((c) => c.response_time_ms).length
     ? Math.round(
         conversations.filter((c) => c.response_time_ms).reduce((a, c) => a + (c.response_time_ms ?? 0), 0) /
           conversations.filter((c) => c.response_time_ms).length
       )
     : 0
+  const uniquePhones = new Set(conversations.map((c) => c.phone)).size
 
-  // 7-day chart data
+  // ── 7-day chart ──────────────────────────────────────────────────────────────
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const date = subDays(new Date(), 6 - i)
     const dayStr = format(date, 'yyyy-MM-dd')
     const dayConvs = conversations.filter((c) => {
-      try {
-        return format(parseISO(c.created_at), 'yyyy-MM-dd') === dayStr
-      } catch {
-        return false
-      }
+      try { return format(parseISO(c.created_at), 'yyyy-MM-dd') === dayStr } catch { return false }
     })
     return {
       date: format(date, 'MMM d'),
@@ -98,31 +117,82 @@ export default function DashboardPage() {
     }
   })
 
-  // Property interest chart
+  // ── Property interest ────────────────────────────────────────────────────────
   const propertyMap: Record<string, number> = {}
   conversations.forEach((c) => {
-    if (c.property_interest) {
-      propertyMap[c.property_interest] = (propertyMap[c.property_interest] ?? 0) + 1
-    }
+    if (c.property_interest) propertyMap[c.property_interest] = (propertyMap[c.property_interest] ?? 0) + 1
   })
   const propertyData = Object.entries(propertyMap)
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 6)
 
-  // Unique contacts
-  const uniquePhones = new Set(conversations.map((c) => c.phone)).size
-
-  // Recent convs (latest per phone)
+  // ── Recent contacts ──────────────────────────────────────────────────────────
   const phoneMap: Record<string, Conversation> = {}
   conversations.forEach((c) => {
-    if (!phoneMap[c.phone] || c.created_at > phoneMap[c.phone].created_at) {
-      phoneMap[c.phone] = c
-    }
+    if (!phoneMap[c.phone] || c.created_at > phoneMap[c.phone].created_at) phoneMap[c.phone] = c
   })
   const recentContacts = Object.values(phoneMap)
     .sort((a, b) => (b.created_at > a.created_at ? 1 : -1))
     .slice(0, 5)
+
+  // ── Heatmap: day × hour ──────────────────────────────────────────────────────
+  const heatmapGrid = useMemo(() => {
+    const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0))
+    conversations.forEach((c) => {
+      try {
+        const d = parseISO(c.created_at)
+        grid[d.getDay()][d.getHours()]++
+      } catch {}
+    })
+    return grid
+  }, [conversations])
+
+  const heatmapMax = useMemo(() => Math.max(1, ...heatmapGrid.flat()), [heatmapGrid])
+
+  // ── Seasonal trends: last 12 months ─────────────────────────────────────────
+  const seasonalData = useMemo(() => {
+    const map: Record<string, { leads: number; escalations: number }> = {}
+    for (let i = 11; i >= 0; i--) {
+      const key = format(subMonths(startOfMonth(new Date()), i), 'yyyy-MM')
+      map[key] = { leads: 0, escalations: 0 }
+    }
+    conversations.forEach((c) => {
+      try {
+        const key = format(parseISO(c.created_at), 'yyyy-MM')
+        if (map[key]) {
+          map[key].leads++
+          if (c.needs_human) map[key].escalations++
+        }
+      } catch {}
+    })
+    return Object.entries(map).map(([key, { leads, escalations }]) => ({
+      month: format(parseISO(key + '-01'), 'MMM yy'),
+      leads,
+      convRate: leads ? Math.round((escalations / leads) * 100) : 0,
+    }))
+  }, [conversations])
+
+  // ── ROI / channel tracker ─────────────────────────────────────────────────────
+  const channelData = useMemo(() => {
+    const map: Record<string, { leads: number; conversions: number }> = {}
+    const source = analyticsEvents.length > 0 ? analyticsEvents : []
+
+    if (source.length === 0) {
+      // Fallback: try to infer from conversations if no analytics_events
+      return []
+    }
+
+    source.forEach((e) => {
+      const key = (e.lead_source || 'unknown').toLowerCase()
+      if (!map[key]) map[key] = { leads: 0, conversions: 0 }
+      map[key].leads++
+    })
+
+    return Object.entries(map)
+      .map(([channel, { leads, conversions }]) => ({ channel, leads, conversions }))
+      .sort((a, b) => b.leads - a.leads)
+  }, [analyticsEvents])
 
   const CustomTooltip = ({ active, payload, label }: Record<string, unknown>) => {
     if (active && payload && Array.isArray(payload) && payload.length) {
@@ -159,73 +229,23 @@ export default function DashboardPage() {
       <Header onRefresh={handleRefresh} refreshing={refreshing} />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Stat Cards */}
+
+        {/* ── Stat Cards ─────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title="Total Messages"
-            value={totalMessages.toLocaleString()}
-            icon={MessageSquare}
-            color="indigo"
-            subtitle="All time conversations"
-          />
-          <StatCard
-            title="Voice Messages"
-            value={voiceMessages.toLocaleString()}
-            icon={Mic}
-            color="green"
-            subtitle={`${totalMessages ? Math.round((voiceMessages / totalMessages) * 100) : 0}% of total`}
-          />
-          <StatCard
-            title="Avg Response Time"
-            value={avgResponseTime ? `${(avgResponseTime / 1000).toFixed(1)}s` : 'N/A'}
-            icon={Clock}
-            color="blue"
-            subtitle="AI response latency"
-          />
-          <StatCard
-            title="Escalations"
-            value={escalations.toLocaleString()}
-            icon={AlertTriangle}
-            color="yellow"
-            subtitle="Need human review"
-          />
+          <StatCard title="Total Messages" value={totalMessages.toLocaleString()} icon={MessageSquare} color="indigo" subtitle="All time conversations" />
+          <StatCard title="Voice Messages" value={voiceMessages.toLocaleString()} icon={Mic} color="green" subtitle={`${totalMessages ? Math.round((voiceMessages / totalMessages) * 100) : 0}% of total`} />
+          <StatCard title="Avg Response Time" value={avgResponseTime ? `${(avgResponseTime / 1000).toFixed(1)}s` : 'N/A'} icon={Clock} color="blue" subtitle="AI response latency" />
+          <StatCard title="Escalations" value={escalations.toLocaleString()} icon={AlertTriangle} color="yellow" subtitle="Need human review" />
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard title="Unique Contacts" value={uniquePhones.toLocaleString()} icon={Users} color="purple" subtitle="Active leads" />
+          <StatCard title="7-Day Messages" value={last7Days.reduce((a, d) => a + d.messages, 0).toLocaleString()} icon={TrendingUp} color="indigo" subtitle="Last 7 days" />
+          <StatCard title="Voice Rate" value={`${totalMessages ? Math.round((voiceMessages / totalMessages) * 100) : 0}%`} icon={Mic} color="green" subtitle="Voice vs text ratio" />
+          <StatCard title="Escalation Rate" value={`${totalMessages ? Math.round((escalations / totalMessages) * 100) : 0}%`} icon={Zap} color="red" subtitle="Needs human" />
         </div>
 
-        {/* Second row stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title="Unique Contacts"
-            value={uniquePhones.toLocaleString()}
-            icon={Users}
-            color="purple"
-            subtitle="Active leads"
-          />
-          <StatCard
-            title="7-Day Messages"
-            value={last7Days.reduce((a, d) => a + d.messages, 0).toLocaleString()}
-            icon={TrendingUp}
-            color="indigo"
-            subtitle="Last 7 days"
-          />
-          <StatCard
-            title="Voice Rate"
-            value={`${totalMessages ? Math.round((voiceMessages / totalMessages) * 100) : 0}%`}
-            icon={Mic}
-            color="green"
-            subtitle="Voice vs text ratio"
-          />
-          <StatCard
-            title="Escalation Rate"
-            value={`${totalMessages ? Math.round((escalations / totalMessages) * 100) : 0}%`}
-            icon={Zap}
-            color="red"
-            subtitle="Needs human"
-          />
-        </div>
-
-        {/* Charts */}
+        {/* ── 7-day + property charts ─────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* 7-day area chart */}
           <div className="lg:col-span-2 bg-dark-800 border border-dark-600 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-white mb-4">Message Activity (7 Days)</h3>
             <ResponsiveContainer width="100%" height={220}>
@@ -250,8 +270,6 @@ export default function DashboardPage() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-
-          {/* Property interest chart */}
           <div className="bg-dark-800 border border-dark-600 rounded-xl p-5">
             <h3 className="text-sm font-semibold text-white mb-4">Property Interests</h3>
             {propertyData.length > 0 ? (
@@ -264,14 +282,171 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[220px] flex items-center justify-center text-gray-600 text-sm">
-                No property data yet
-              </div>
+              <div className="h-[220px] flex items-center justify-center text-gray-600 text-sm">No property data yet</div>
             )}
           </div>
         </div>
 
-        {/* Recent Conversations */}
+        {/* ── Heatmap ─────────────────────────────────────────────────────────── */}
+        <div className="bg-dark-800 border border-dark-600 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Flame className="w-4 h-4 text-orange-400" />
+            <h3 className="text-sm font-semibold text-white">Lead Activity Heatmap</h3>
+            <span className="text-xs text-gray-500 ml-1">— when are buyers most active?</span>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[600px]">
+              {/* Hour labels */}
+              <div className="flex mb-1 ml-10">
+                {HOURS.map((h, i) => (
+                  <div key={i} className="flex-1 text-center text-[9px] text-gray-600">
+                    {i % 3 === 0 ? h : ''}
+                  </div>
+                ))}
+              </div>
+              {/* Grid rows */}
+              {DAYS.map((day, di) => (
+                <div key={day} className="flex items-center mb-0.5">
+                  <span className="w-10 text-xs text-gray-500 shrink-0">{day}</span>
+                  {heatmapGrid[di].map((val, hi) => {
+                    const intensity = val / heatmapMax
+                    const alpha = intensity === 0 ? 0 : Math.max(0.08, intensity)
+                    return (
+                      <div
+                        key={hi}
+                        className="flex-1 h-6 rounded-sm mx-px cursor-default transition-opacity"
+                        style={{ backgroundColor: `rgba(99,102,241,${alpha})` }}
+                        title={`${day} ${HOURS[hi]}: ${val} lead${val !== 1 ? 's' : ''}`}
+                      />
+                    )
+                  })}
+                </div>
+              ))}
+              {/* Legend */}
+              <div className="flex items-center gap-2 mt-3 justify-end">
+                <span className="text-xs text-gray-600">Less</span>
+                {[0.08, 0.25, 0.45, 0.65, 0.85, 1].map((a, i) => (
+                  <div key={i} className="w-4 h-4 rounded-sm" style={{ backgroundColor: `rgba(99,102,241,${a})` }} />
+                ))}
+                <span className="text-xs text-gray-600">More</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Seasonal Trends ──────────────────────────────────────────────────── */}
+        <div className="bg-dark-800 border border-dark-600 rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="w-4 h-4 text-blue-400" />
+            <h3 className="text-sm font-semibold text-white">Seasonal Trends</h3>
+            <span className="text-xs text-gray-500 ml-1">— lead volume & escalation rate by month</span>
+          </div>
+          {seasonalData.some((d) => d.leads > 0) ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={seasonalData} margin={{ top: 5, right: 20, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#22222e" />
+                <XAxis dataKey="month" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="left" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v}%`} tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+                    return (
+                      <div className="bg-dark-700 border border-dark-500 rounded-lg p-3 text-xs shadow-xl">
+                        <p className="text-gray-400 mb-1">{label}</p>
+                        {payload.map((p: any) => (
+                          <p key={p.name} style={{ color: p.color }}>
+                            {p.name}: <span className="font-bold">{p.value}{p.name === 'Conv. Rate' ? '%' : ''}</span>
+                          </p>
+                        ))}
+                      </div>
+                    )
+                  }}
+                />
+                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
+                <Bar yAxisId="left" dataKey="leads" name="Leads" fill="#6366f1" fillOpacity={0.8} radius={[3, 3, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="convRate" name="Conv. Rate" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[240px] flex items-center justify-center text-gray-600 text-sm">
+              No data yet — will populate as leads come in
+            </div>
+          )}
+        </div>
+
+        {/* ── ROI / Channel Tracker ────────────────────────────────────────────── */}
+        <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-dark-600 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-green-400" />
+            <h3 className="text-sm font-semibold text-white">Channel / Source Tracker</h3>
+            <span className="text-xs text-gray-500 ml-1">— where are leads coming from?</span>
+          </div>
+          {channelData.length === 0 ? (
+            <div className="px-5 py-10 text-center">
+              <p className="text-sm text-gray-500">No source data yet.</p>
+              <p className="text-xs text-gray-600 mt-1">
+                Pass <code className="bg-dark-700 px-1 rounded">lead_source</code> (e.g. <code className="bg-dark-700 px-1 rounded">facebook</code>, <code className="bg-dark-700 px-1 rounded">zameen</code>, <code className="bg-dark-700 px-1 rounded">olx</code>) when logging analytics events.
+              </p>
+            </div>
+          ) : (
+            <div>
+              {/* Bar chart */}
+              <div className="p-5 border-b border-dark-600">
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={channelData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#22222e" />
+                    <XAxis dataKey="channel" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Bar dataKey="leads" name="Leads" radius={[4, 4, 0, 0]}>
+                      {channelData.map((entry, index) => (
+                        <Cell key={index} fill={channelColor(entry.channel)} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Table */}
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-dark-600">
+                    <th className="px-5 py-3 text-left text-xs text-gray-500 font-medium">Channel</th>
+                    <th className="px-5 py-3 text-right text-xs text-gray-500 font-medium">Leads</th>
+                    <th className="px-5 py-3 text-right text-xs text-gray-500 font-medium">Share</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-600">
+                  {channelData.map((row) => {
+                    const total = channelData.reduce((a, r) => a + r.leads, 0)
+                    const share = total ? Math.round((row.leads / total) * 100) : 0
+                    return (
+                      <tr key={row.channel} className="hover:bg-dark-700/40 transition-colors">
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: channelColor(row.channel) }} />
+                            <span className="text-white capitalize">{row.channel}</span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-right text-white font-medium">{row.leads.toLocaleString()}</td>
+                        <td className="px-5 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-16 h-1.5 bg-dark-600 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full" style={{ width: `${share}%`, backgroundColor: channelColor(row.channel) }} />
+                            </div>
+                            <span className="text-gray-400 text-xs w-8 text-right">{share}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ── Recent Conversations ─────────────────────────────────────────────── */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-dark-600">
             <h3 className="text-sm font-semibold text-white">Recent Conversations</h3>
@@ -282,43 +457,26 @@ export default function DashboardPage() {
             ) : (
               recentContacts.map((conv) => (
                 <div key={conv.phone} className="flex items-center gap-4 px-5 py-3.5 hover:bg-dark-700/50 transition-colors">
-                  <div
-                    className={`w-9 h-9 rounded-full ${getAvatarColor(conv.phone)} flex items-center justify-center shrink-0`}
-                  >
-                    <span className="text-xs font-bold text-white">
-                      {getInitials(conv.name, conv.phone)}
-                    </span>
+                  <div className={`w-9 h-9 rounded-full ${getAvatarColor(conv.phone)} flex items-center justify-center shrink-0`}>
+                    <span className="text-xs font-bold text-white">{getInitials(conv.name, conv.phone)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-white truncate">
-                        {conv.name ?? formatPhone(conv.phone)}
-                      </p>
-                      <p className="text-xs text-gray-500 shrink-0">
-                        {format(parseISO(conv.created_at), 'MMM d, h:mm a')}
-                      </p>
+                      <p className="text-sm font-medium text-white truncate">{conv.name ?? formatPhone(conv.phone)}</p>
+                      <p className="text-xs text-gray-500 shrink-0">{format(parseISO(conv.created_at), 'MMM d, h:mm a')}</p>
                     </div>
-                    <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {conv.user_message ?? '(voice message)'}
-                    </p>
+                    <p className="text-xs text-gray-500 truncate mt-0.5">{conv.user_message ?? '(voice message)'}</p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {conv.is_voice && (
-                      <span className="px-1.5 py-0.5 text-xs rounded bg-green-500/15 text-green-400 border border-green-500/20">
-                        Voice
-                      </span>
-                    )}
-                    {conv.needs_human && (
-                      <span className="px-1.5 py-0.5 text-xs rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">
-                        Escalated
-                      </span>
-                    )}
+                    {conv.is_voice && <span className="px-1.5 py-0.5 text-xs rounded bg-green-500/15 text-green-400 border border-green-500/20">Voice</span>}
+                    {conv.needs_human && <span className="px-1.5 py-0.5 text-xs rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">Escalated</span>}
                   </div>
                 </div>
               ))
             )}
           </div>
         </div>
+
       </div>
     </div>
   )
