@@ -77,7 +77,7 @@ export default function DashboardPage() {
           .order('created_at', { ascending: false }),
       ])
       if (!convRes.error) setConversations(convRes.data ?? [])
-      if (!evtRes.error) setAnalyticsEvents(evtRes.data ?? [])
+      if (!evtRes.error) setAnalyticsEvents((evtRes.data ?? []) as AnalyticsEvent[])
     } catch (err) {
       console.error('Failed to fetch data:', err)
     } finally {
