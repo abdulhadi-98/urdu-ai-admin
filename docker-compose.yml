@@ -1,0 +1,43 @@
+version: "3.8"
+
+services:
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* vars are baked into the JS bundle at build time
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_SUPABASE_SERVICE_KEY: ${NEXT_PUBLIC_SUPABASE_SERVICE_KEY}
+    image: urdu-ai-admin:latest
+    container_name: urdu-ai-admin
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
+      - "traefik.http.routers.urdu-admin.rule=Host(`${ADMIN_DOMAIN}`)"
+      - "traefik.http.routers.urdu-admin.entrypoints=websecure"
+      - "traefik.http.routers.urdu-admin.tls=true"
+      - "traefik.http.routers.urdu-admin.tls.certresolver=letsencrypt"
+      - "traefik.http.services.urdu-admin.loadbalancer.server.port=3000"
+      - "traefik.http.routers.urdu-admin-http.rule=Host(`${ADMIN_DOMAIN}`)"
+      - "traefik.http.routers.urdu-admin-http.entrypoints=web"
+      - "traefik.http.routers.urdu-admin-http.middlewares=redirect-https"
+      - "traefik.http.middlewares.redirect-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.redirect-https.redirectscheme.permanent=true"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  traefik-public:
+    external: true
