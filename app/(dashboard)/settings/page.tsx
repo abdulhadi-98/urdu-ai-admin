@@ -23,7 +23,6 @@ export default function SettingsPage() {
   const [showServiceKey, setShowServiceKey] = useState(false)
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? ''
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
   const serviceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY ?? ''
 
@@ -96,7 +95,7 @@ export default function SettingsPage() {
             <div>
               <label className="block text-xs text-gray-500 mb-1.5">Supabase URL</label>
               <div className="bg-dark-700 border border-dark-600 rounded-lg px-4 py-2.5 text-sm text-white font-mono truncate">
-                {supabaseUrl || 'Not configured'}
+                /api/sb (proxied server-side)
               </div>
             </div>
           </div>
