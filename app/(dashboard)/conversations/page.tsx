@@ -135,18 +135,9 @@ export default function ConversationsPage() {
 
   useEffect(() => {
     fetchConversations()
-
-    // Realtime subscription
-    const channel = supabaseAdmin
-      .channel('conversations-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, () => {
-        fetchConversations()
-      })
-      .subscribe()
-
-    return () => {
-      supabaseAdmin.removeChannel(channel)
-    }
+    // Poll every 8 seconds (realtime WebSocket unavailable — Supabase is HTTP-only)
+    const interval = setInterval(fetchConversations, 8000)
+    return () => clearInterval(interval)
   }, [fetchConversations])
 
   // Build thread when selectedPhone changes

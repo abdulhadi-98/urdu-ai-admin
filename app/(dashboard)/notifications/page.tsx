@@ -60,17 +60,9 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     fetchNotifications()
-
-    const channel = supabaseAdmin
-      .channel('notifications-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
-        fetchNotifications()
-      })
-      .subscribe()
-
-    return () => {
-      supabaseAdmin.removeChannel(channel)
-    }
+    // Poll every 8 seconds (realtime WebSocket unavailable — Supabase is HTTP-only)
+    const interval = setInterval(fetchNotifications, 8000)
+    return () => clearInterval(interval)
   }, [fetchNotifications])
 
   const handleAcknowledge = async (id: string) => {

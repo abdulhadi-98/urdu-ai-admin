@@ -6,11 +6,13 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # NEXT_PUBLIC_* vars are baked into the JS bundle at build time
+        # Only API keys are baked into the JS bundle at build time
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
         NEXT_PUBLIC_SUPABASE_SERVICE_KEY: ${NEXT_PUBLIC_SUPABASE_SERVICE_KEY}
+    environment:
+      # SUPABASE_URL is read server-side by the /api/sb proxy — HTTP is fine here
+      SUPABASE_URL: ${SUPABASE_URL}
     image: urdu-ai-admin:latest
     container_name: urdu-ai-admin
     restart: unless-stopped

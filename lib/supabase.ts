@@ -1,23 +1,24 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321'
+// In the browser: route through our Next.js HTTPS proxy (/api/sb/...)
+// On the server / at build time: hit Supabase directly over HTTP
+const supabaseUrl =
+  typeof window === 'undefined'
+    ? process.env.SUPABASE_URL || 'http://localhost:54321'
+    : window.location.origin + '/api/sb'
+
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
 const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY || 'placeholder-service-key'
 
-// Public client for general use
+// Public client
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
+  auth: { persistSession: false, autoRefreshToken: false },
 })
 
-// Service role client for admin operations
+// Service-role client for admin operations (realtime disabled — WebSocket can't go through proxy)
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  },
+  auth: { persistSession: false, autoRefreshToken: false },
+  realtime: { params: { eventsPerSecond: -1 } },
 })
 
 export type Conversation = {
