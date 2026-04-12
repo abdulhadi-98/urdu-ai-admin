@@ -1,48 +1,35 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { config } from './config'
+import { createClient } from '@supabase/supabase-js'
 
-// Browser: proxy through /api/sb (HTTPS, avoids mixed content)
-// Server/build: direct HTTP URL
-const getUrl = () =>
-  typeof window === 'undefined'
-    ? process.env.SUPABASE_URL || 'http://localhost:54321'
-    : window.location.origin + '/api/sb'
+// The inline <script> in layout.tsx sets window.__APP_CONFIG__ before any
+// JS bundle loads, so these are safe to read at module initialisation time.
+const isBrowser = typeof window !== 'undefined'
 
-// Lazy singletons — keys are read at call time from window.__APP_CONFIG__
-let _admin: SupabaseClient | null = null
-let _public: SupabaseClient | null = null
+// Browser → HTTPS proxy (avoids mixed-content with HTTP Supabase)
+// Server → direct HTTP URL (server-side calls are fine over HTTP)
+const supabaseUrl = isBrowser
+  ? window.location.origin + '/api/sb'
+  : process.env.SUPABASE_URL || 'http://localhost:54321'
 
-export function getSupabaseAdmin(): SupabaseClient {
-  if (!_admin) {
-    _admin = createClient(getUrl(), config.supabaseServiceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-      realtime: { params: { eventsPerSecond: -1 } },
-    })
-  }
-  return _admin
-}
+const cfg = isBrowser ? (window as any).__APP_CONFIG__ ?? {} : {}
 
-export function getSupabase(): SupabaseClient {
-  if (!_public) {
-    _public = createClient(getUrl(), config.supabaseAnonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
-  }
-  return _public
-}
+const anonKey: string =
+  cfg.supabaseAnonKey || process.env.SUPABASE_ANON_KEY || 'placeholder'
 
-// Keep named exports for backwards compat — these resolve lazily
-export const supabaseAdmin = new Proxy({} as SupabaseClient, {
-  get(_, prop) {
-    return (getSupabaseAdmin() as any)[prop]
-  },
+const serviceKey: string =
+  cfg.supabaseServiceKey || process.env.SUPABASE_SERVICE_KEY || 'placeholder'
+
+// Public client
+export const supabase = createClient(supabaseUrl, anonKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
 })
 
-export const supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop) {
-    return (getSupabase() as any)[prop]
-  },
+// Service-role client (realtime disabled — WebSocket can't go through proxy)
+export const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
+  auth: { persistSession: false, autoRefreshToken: false },
+  realtime: { params: { eventsPerSecond: -1 } },
 })
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 export type Conversation = {
   id: string
