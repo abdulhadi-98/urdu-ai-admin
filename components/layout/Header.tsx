@@ -6,6 +6,7 @@ import { Bell, RefreshCw } from 'lucide-react'
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/conversations': 'Conversations',
+  '/web-leads': 'Web Leads',
   '/notifications': 'Notifications',
   '/knowledge-base': 'Knowledge Base',
   '/prompts': 'Prompt Editor',

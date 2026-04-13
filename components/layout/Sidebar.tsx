@@ -13,6 +13,7 @@ import {
   Bot,
   ChevronRight,
   Puzzle,
+  Globe,
 } from 'lucide-react'
 import { logout } from '@/lib/auth'
 import { TENANT } from '@/lib/auth'
@@ -21,6 +22,7 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
   { label: 'Conversations', icon: MessageSquare, href: '/conversations' },
+  { label: 'Web Leads', icon: Globe, href: '/web-leads' },
   { label: 'Notifications', icon: Bell, href: '/notifications' },
   { label: 'Knowledge Base', icon: BookOpen, href: '/knowledge-base' },
   { label: 'Prompts', icon: Settings, href: '/prompts' },
