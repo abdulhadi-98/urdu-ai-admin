@@ -65,7 +65,11 @@ export default function PromptsPage() {
     async function load() {
       try {
         const res = await fetch(`${API}/api/admin/prompts`)
-        const json = await res.json()
+        const text = await res.text()
+        let json: { success?: boolean; data?: { agent_type: string; prompt: string }[]; error?: string } = {}
+        try { json = JSON.parse(text) } catch {
+          throw new Error(`Agent returned (${res.status}): ${text.slice(0, 200) || '(empty response)'}`)
+        }
         if (!res.ok) throw new Error(json.error || 'Failed to load prompts')
 
         const map: Record<string, string> = {}
@@ -77,7 +81,6 @@ export default function PromptsPage() {
           handoff: map.handoff || DEFAULTS.handoff,
         })
       } catch (err: unknown) {
-        // Fall back to defaults silently — agent will also use defaults
         setPrompts(DEFAULTS)
         if (err instanceof Error) setError(err.message)
       } finally {
