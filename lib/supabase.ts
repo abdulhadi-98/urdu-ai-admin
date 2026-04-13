@@ -51,6 +51,10 @@ export type Conversation = {
   preferred_location: string | null
   response_time_ms: number | null
   created_at: string
+  // Widget / website fields (optional — may not exist in all deployments)
+  source?: 'whatsapp' | 'website' | string | null
+  visitor_id?: string | null
+  page_url?: string | null
 }
 
 export type Notification = {
