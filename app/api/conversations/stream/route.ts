@@ -25,8 +25,10 @@ export async function GET(req: NextRequest) {
   const encoder = new TextEncoder()
 
   let cleanedUp = false
-  let channelRef: ReturnType<ReturnType<typeof createClient>['channel']> | null = null
-  let clientRef: ReturnType<typeof createClient> | null = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let channelRef: any = null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let clientRef: any = null
   let keepaliveTimer: ReturnType<typeof setInterval> | null = null
   let controllerRef: ReadableStreamDefaultController | null = null
 
