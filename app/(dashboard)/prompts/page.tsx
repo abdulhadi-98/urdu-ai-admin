@@ -96,8 +96,12 @@ export default function PromptsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompts[key] }),
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error || 'Save failed')
+      const text = await res.text()
+      let json: Record<string, unknown> = {}
+      try { json = JSON.parse(text) } catch {
+        throw new Error(`Server returned non-JSON (${res.status}): ${text.slice(0, 120)}`)
+      }
+      if (!res.ok) throw new Error((json.error as string) || 'Save failed')
       setSavedKey(key)
       setTimeout(() => setSavedKey(null), 3000)
     } catch (err: unknown) {
