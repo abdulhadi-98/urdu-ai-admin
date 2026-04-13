@@ -12,6 +12,7 @@ import {
   LogOut,
   Bot,
   ChevronRight,
+  Puzzle,
 } from 'lucide-react'
 import { logout } from '@/lib/auth'
 import { TENANT } from '@/lib/auth'
@@ -23,6 +24,7 @@ const navItems = [
   { label: 'Notifications', icon: Bell, href: '/notifications' },
   { label: 'Knowledge Base', icon: BookOpen, href: '/knowledge-base' },
   { label: 'Prompts', icon: Settings, href: '/prompts' },
+  { label: 'Widget Config', icon: Puzzle, href: '/widget-config' },
   { label: 'Settings', icon: User, href: '/settings' },
 ]
 

@@ -9,6 +9,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/notifications': 'Notifications',
   '/knowledge-base': 'Knowledge Base',
   '/prompts': 'Prompt Editor',
+  '/widget-config': 'Widget Configuration',
   '/settings': 'Settings',
 }
 
