@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { Save, RotateCcw, Info, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import Header from '@/components/layout/Header'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+const API = '/api/backend'
 
 const DEFAULTS = {
   system: `You are a helpful, friendly AI assistant for a Pakistani business. Your name is "Amara".
