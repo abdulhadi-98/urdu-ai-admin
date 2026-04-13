@@ -10,7 +10,6 @@ import {
   Layout,
   Mic,
   Timer,
-  Clock,
   Code,
   Copy,
   Check,
@@ -59,9 +58,6 @@ interface WidgetConfig {
   theme: 'dark' | 'light'
   voiceEnabled: boolean
   autoOpenSeconds: number
-  businessHoursStart: string
-  businessHoursEnd: string
-  offlineMessage: string
   maxVoiceSessions: number
   testMode: boolean
 }
@@ -75,9 +71,6 @@ const DEFAULT_CONFIG: WidgetConfig = {
   theme: 'dark',
   voiceEnabled: true,
   autoOpenSeconds: 0,
-  businessHoursStart: '09:00',
-  businessHoursEnd: '18:00',
-  offlineMessage: "We're currently offline. Leave a message and we'll get back to you soon.",
   maxVoiceSessions: 10,
   testMode: false,
 }
@@ -800,47 +793,6 @@ export default function WidgetConfigPage() {
                 </div>
               </div>
 
-              {/* Business hours */}
-              <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-dark-600">
-                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-yellow-400" />
-                    Business Hours
-                  </h3>
-                </div>
-                <div className="p-5 space-y-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-2">Opening Time</label>
-                      <input
-                        type="time"
-                        value={config.businessHoursStart}
-                        onChange={(e) => update('businessHoursStart', e.target.value)}
-                        className="w-full bg-dark-700 border border-dark-500 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/60 [color-scheme:dark]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-2">Closing Time</label>
-                      <input
-                        type="time"
-                        value={config.businessHoursEnd}
-                        onChange={(e) => update('businessHoursEnd', e.target.value)}
-                        className="w-full bg-dark-700 border border-dark-500 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/60 [color-scheme:dark]"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-2">Offline Message</label>
-                    <textarea
-                      value={config.offlineMessage}
-                      onChange={(e) => update('offlineMessage', e.target.value)}
-                      rows={3}
-                      className="w-full bg-dark-700 border border-dark-500 rounded-lg px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500/60 resize-none transition-colors"
-                    />
-                    <p className="text-xs text-gray-600 mt-1">Shown to visitors outside business hours</p>
-                  </div>
-                </div>
-              </div>
             </div>
           )}
 
