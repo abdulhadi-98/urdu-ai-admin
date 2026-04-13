@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { Save, RotateCcw, Info, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import Header from '@/components/layout/Header'
 
-const API = '/api/backend'
+const API = '/api/prompts'
 
 const DEFAULTS = {
   system: `You are a helpful, friendly AI assistant for a Pakistani business. Your name is "Amara".
@@ -64,7 +64,7 @@ export default function PromptsPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API}/api/admin/prompts`)
+        const res = await fetch(`${API}`)
         const text = await res.text()
         let json: { success?: boolean; data?: { agent_type: string; prompt: string }[]; error?: string } = {}
         try { json = JSON.parse(text) } catch {
@@ -94,10 +94,10 @@ export default function PromptsPage() {
     setSaving(key)
     setError(null)
     try {
-      const res = await fetch(`${API}/api/admin/prompts/${key}`, {
+      const res = await fetch(`${API}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: prompts[key] }),
+        body: JSON.stringify({ agent_type: key, prompt: prompts[key] }),
       })
       const text = await res.text()
       let json: Record<string, unknown> = {}
