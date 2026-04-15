@@ -355,12 +355,33 @@ export default function WidgetConfigPage() {
   const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>([])
   const [analyticsLoading, setAnalyticsLoading] = useState(true)
 
-  // Load persisted config
+  // Load config from backend DB on mount
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('widget_config')
-      if (stored) setConfig({ ...DEFAULT_CONFIG, ...JSON.parse(stored) })
-    } catch {}
+    async function load() {
+      try {
+        const res = await fetch(`/api/backend/api/admin/tenant/${TENANT.slug}`)
+        if (!res.ok) throw new Error('Failed to load config')
+        const { data } = await res.json()
+        if (!data) return
+        // Map DB fields → WidgetConfig
+        const pos = data.widget_position ?? 'bottom-right'
+        setConfig((prev) => ({
+          ...prev,
+          brandColor:        data.widget_color             ?? prev.brandColor,
+          agentName:         data.agent_name               ?? prev.agentName,
+          welcomeMessageEn:  data.widget_welcome_message   ?? prev.welcomeMessageEn,
+          welcomeMessageUr:  data.widget_welcome_message_urdu ?? prev.welcomeMessageUr,
+          bubblePosition:    pos.includes('left') ? 'left' : 'right',
+          theme:             data.widget_theme             ?? prev.theme,
+          voiceEnabled:      data.widget_voice_enabled     ?? prev.voiceEnabled,
+          autoOpenSeconds:   data.widget_auto_open_seconds ?? prev.autoOpenSeconds,
+          maxVoiceSessions:  data.widget_max_voice_sessions ?? prev.maxVoiceSessions,
+        }))
+      } catch (err) {
+        console.warn('Could not load widget config from backend, using defaults:', err)
+      }
+    }
+    load()
   }, [])
 
   // Fetch analytics when tab is active
@@ -388,13 +409,37 @@ export default function WidgetConfigPage() {
 
   const handleSave = async () => {
     setSaving(true)
-    localStorage.setItem('widget_config', JSON.stringify(config))
-    // POST to backend when the endpoint is ready:
-    // await fetch('/api/backend/widget-config', { method: 'POST', body: JSON.stringify(config) })
-    await new Promise((r) => setTimeout(r, 500))
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+    try {
+      // Map WidgetConfig fields → tenant_config DB fields
+      const payload = {
+        widget_color:              config.brandColor,
+        agent_name:                config.agentName,
+        widget_welcome_message:    config.welcomeMessageEn,
+        widget_welcome_message_urdu: config.welcomeMessageUr,
+        widget_position:           config.bubblePosition === 'left' ? 'bottom-left' : 'bottom-right',
+        widget_theme:              config.theme,
+        widget_voice_enabled:      config.voiceEnabled,
+        widget_auto_open_seconds:  config.autoOpenSeconds,
+        widget_max_voice_sessions: config.maxVoiceSessions,
+      }
+
+      const res = await fetch(`/api/backend/api/admin/tenant/${TENANT.slug}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Server error ${res.status}`)
+      }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (err) {
+      console.error('Failed to save widget config:', err)
+      alert(`Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
