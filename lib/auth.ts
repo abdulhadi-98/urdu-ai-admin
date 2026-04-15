@@ -1,14 +1,25 @@
-const ADMIN_PASSWORD = 'Admin2026!'
 const AUTH_KEY = 'admin_authed'
 
-export function login(password: string): boolean {
-  if (password === ADMIN_PASSWORD) {
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem(AUTH_KEY, 'true')
+/**
+ * Verifies the password server-side (against DB, then env var).
+ * Password is never stored or compared in client code.
+ */
+export async function login(password: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
+    const data = await res.json()
+    if (data.success) {
+      if (typeof window !== 'undefined') sessionStorage.setItem(AUTH_KEY, 'true')
+      return true
     }
-    return true
+    return false
+  } catch {
+    return false
   }
-  return false
 }
 
 export function logout(): void {

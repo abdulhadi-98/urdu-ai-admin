@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic'
 
 import { useState } from 'react'
 import {
-  Save,
   Bot,
   Globe,
   Key,
@@ -13,14 +12,28 @@ import {
   Eye,
   EyeOff,
   Info,
+  Lock,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import { TENANT } from '@/lib/auth'
 
+const BACKEND = '/api/backend'
+
 export default function SettingsPage() {
-  const [saved, setSaved] = useState(false)
   const [showAnonKey, setShowAnonKey] = useState(false)
   const [showServiceKey, setShowServiceKey] = useState(false)
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showCurrent, setShowCurrent] = useState(false)
+  const [showNew, setShowNew] = useState(false)
+  const [pwSaving, setPwSaving] = useState(false)
+  const [pwSaved, setPwSaved] = useState(false)
+  const [pwError, setPwError] = useState('')
 
   const cfg = typeof window !== 'undefined' ? (window as any).__APP_CONFIG__ ?? {} : {}
   const apiUrl: string = cfg.apiUrl || ''
@@ -30,6 +43,58 @@ export default function SettingsPage() {
   const maskKey = (key: string) => {
     if (!key) return 'Not configured'
     return key.slice(0, 20) + '...' + key.slice(-10)
+  }
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPwError('')
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPwError('All fields are required')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError('New passwords do not match')
+      return
+    }
+    if (newPassword.length < 8) {
+      setPwError('New password must be at least 8 characters')
+      return
+    }
+
+    setPwSaving(true)
+    try {
+      // Verify current password via server-side auth route
+      const verifyRes = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: currentPassword }),
+      })
+      if (!verifyRes.ok) {
+        setPwError('Current password is incorrect')
+        return
+      }
+
+      // Save new password to DB via backend (persists in tenant_config.admin_password)
+      const saveRes = await fetch(`${BACKEND}/api/admin/tenant/${TENANT.slug}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_password: newPassword }),
+      })
+      if (!saveRes.ok) {
+        const err = await saveRes.json().catch(() => ({}))
+        throw new Error((err as any).error || `Server error ${saveRes.status}`)
+      }
+
+      setPwSaved(true)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setTimeout(() => setPwSaved(false), 3000)
+    } catch (err: unknown) {
+      setPwError(err instanceof Error ? err.message : 'Failed to update password')
+    } finally {
+      setPwSaving(false)
+    }
   }
 
   return (
@@ -76,6 +141,100 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Change Admin Password */}
+        <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-dark-600">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Lock className="w-4 h-4 text-indigo-400" />
+              Change Admin Password
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Stored securely in the database — takes effect immediately on next login.
+            </p>
+          </div>
+          <form onSubmit={handlePasswordChange} className="p-5 space-y-4">
+            {/* Current password */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1.5">Current Password</label>
+              <div className="relative">
+                <input
+                  type={showCurrent ? 'text' : 'password'}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrent(!showCurrent)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                >
+                  {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* New password */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1.5">New Password</label>
+              <div className="relative">
+                <input
+                  type={showNew ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Min. 8 characters"
+                  className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNew(!showNew)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                >
+                  {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Confirm new password */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1.5">Confirm New Password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Repeat new password"
+                className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            {pwError && (
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <p className="text-sm text-red-400">{pwError}</p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-1">
+              {pwSaved && (
+                <span className="flex items-center gap-1.5 text-green-400 text-sm">
+                  <CheckCircle className="w-4 h-4" />
+                  Password updated
+                </span>
+              )}
+              <button
+                type="submit"
+                disabled={pwSaving}
+                className="ml-auto flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                {pwSaving
+                  ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</>
+                  : 'Update Password'
+                }
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Environment Config */}
@@ -160,20 +319,13 @@ export default function SettingsPage() {
           <div className="p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-white font-medium">Local Password Auth</p>
-                <p className="text-xs text-gray-500 mt-0.5">Session stored in browser sessionStorage</p>
+                <p className="text-sm text-white font-medium">Password Auth</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Credentials verified server-side against DB; session stored in sessionStorage
+                </p>
               </div>
               <span className="text-xs bg-green-500/15 text-green-400 border border-green-500/20 rounded-full px-2.5 py-1">
                 Active
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-white font-medium">Supabase Auth</p>
-                <p className="text-xs text-gray-500 mt-0.5">Not used (self-hosted limitations)</p>
-              </div>
-              <span className="text-xs bg-gray-500/15 text-gray-400 border border-gray-500/20 rounded-full px-2.5 py-1">
-                Disabled
               </span>
             </div>
           </div>

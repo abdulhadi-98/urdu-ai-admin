@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import { Save, RotateCcw, Info, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import Header from '@/components/layout/Header'
 
-const API = '/api/prompts'
+const API = '/api/backend'
 
 const DEFAULTS = {
   system: `You are a helpful, friendly AI assistant for a Pakistani business. Your name is "Amara".
@@ -60,11 +60,11 @@ export default function PromptsPage() {
   const [savedKey, setSavedKey] = useState<PromptKey | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Load prompts from backend on mount
+  // Load prompts from AI agent backend on mount
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`${API}`)
+        const res = await fetch(`${API}/api/admin/prompts`)
         const text = await res.text()
         let json: { success?: boolean; data?: { agent_type: string; prompt: string }[]; error?: string } = {}
         try { json = JSON.parse(text) } catch {
@@ -94,10 +94,12 @@ export default function PromptsPage() {
     setSaving(key)
     setError(null)
     try {
-      const res = await fetch(`${API}`, {
+      // PUT through the backend so it writes to DB AND busts the in-process
+      // prompt cache immediately — changes hit the live agent in < 1 second.
+      const res = await fetch(`${API}/api/admin/prompts/${key}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_type: key, prompt: prompts[key] }),
+        body: JSON.stringify({ prompt: prompts[key] }),
       })
       const text = await res.text()
       let json: Record<string, unknown> = {}
@@ -133,9 +135,9 @@ export default function PromptsPage() {
         <div className="flex items-start gap-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl px-4 py-3">
           <Info className="w-4 h-4 text-indigo-400 mt-0.5 shrink-0" />
           <div>
-            <p className="text-sm text-indigo-300 font-medium">Live — changes apply within 60 seconds</p>
+            <p className="text-sm text-indigo-300 font-medium">Live — changes apply instantly</p>
             <p className="text-xs text-indigo-400/80 mt-0.5">
-              Prompts are stored in the database. Each save updates the live agent immediately (cache clears on save, refreshes within 60 s for any in-flight requests).
+              Saves write directly to the AI agent backend — the database is updated and the in-process cache is busted in a single request, so the live agent picks up changes within seconds.
             </p>
           </div>
         </div>

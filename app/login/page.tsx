@@ -32,7 +32,7 @@ export default function LoginPage() {
       return
     }
 
-    const success = login(password)
+    const success = await login(password)
     if (success) {
       router.replace('/dashboard')
     } else {
