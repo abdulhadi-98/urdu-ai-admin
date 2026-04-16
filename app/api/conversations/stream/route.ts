@@ -19,8 +19,14 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const supabaseUrl = process.env.SUPABASE_URL || 'http://localhost:54321'
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY || ''
+  const supabaseUrl =
+    process.env.SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    'http://localhost:54321'
+  const serviceKey =
+    process.env.SUPABASE_SERVICE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY ||
+    ''
 
   const encoder = new TextEncoder()
 

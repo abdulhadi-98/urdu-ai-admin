@@ -16,9 +16,18 @@ export default function RootLayout({
 }) {
   // Inject runtime config — read from server-side env vars (set in Dokploy UI)
   const config = {
-    apiUrl: process.env.API_URL || '',
-    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
-    supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY || '',
+    apiUrl:
+      process.env.API_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      '',
+    supabaseAnonKey:
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      '',
+    supabaseServiceKey:
+      process.env.SUPABASE_SERVICE_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_SERVICE_KEY ||
+      '',
   }
 
   return (

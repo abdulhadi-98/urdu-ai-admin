@@ -7,7 +7,10 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'http://localhost:54321'
+const SUPABASE_URL =
+  process.env.SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  'http://localhost:54321'
 
 const SKIP = new Set(['host', 'connection', 'transfer-encoding', 'content-length'])
 
