@@ -328,8 +328,14 @@ export default function WidgetConfigPage() {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarUploading, setAvatarUploading] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [previewOpen, setPreviewOpen] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type })
+    setTimeout(() => setToast(null), 3500)
+  }
 
   // Load config from backend DB on mount
   useEffect(() => {
@@ -370,39 +376,41 @@ export default function WidgetConfigPage() {
     setSaved(false)
   }
 
+  const saveTenant = async (payload: Record<string, unknown>) => {
+    const res = await fetch(`/api/backend/api/admin/tenant/${TENANT.slug}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err.error || `Server error ${res.status}`)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      // Map WidgetConfig fields → tenant_config DB fields
       const payload: Record<string, unknown> = {
-        widget_color:              config.brandColor,
-        agent_name:                config.agentName,
-        widget_welcome_message:    config.welcomeMessageEn,
+        widget_color:                config.brandColor,
+        agent_name:                  config.agentName,
+        widget_welcome_message:      config.welcomeMessageEn,
         widget_welcome_message_urdu: config.welcomeMessageUr,
-        widget_position:           config.bubblePosition === 'left' ? 'bottom-left' : 'bottom-right',
-        widget_theme:              config.theme,
-        widget_voice_enabled:      config.voiceEnabled,
-        widget_auto_open_seconds:  config.autoOpenSeconds,
-        widget_max_voice_sessions: config.maxVoiceSessions,
+        widget_position:             config.bubblePosition === 'left' ? 'bottom-left' : 'bottom-right',
+        widget_theme:                config.theme,
+        widget_voice_enabled:        config.voiceEnabled,
+        widget_auto_open_seconds:    config.autoOpenSeconds,
+        widget_max_voice_sessions:   config.maxVoiceSessions,
       }
-      if (avatarUrl !== null) {
-        payload.widget_agent_avatar_url = avatarUrl
-      }
+      if (avatarUrl !== null) payload.widget_agent_avatar_url = avatarUrl
 
-      const res = await fetch(`/api/backend/api/admin/tenant/${TENANT.slug}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || `Server error ${res.status}`)
-      }
+      await saveTenant(payload)
       setSaved(true)
+      showToast('Widget config saved')
       setTimeout(() => setSaved(false), 2500)
     } catch (err) {
       console.error('Failed to save widget config:', err)
-      alert(`Save failed: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      showToast(err instanceof Error ? err.message : 'Save failed', 'error')
     } finally {
       setSaving(false)
     }
@@ -412,12 +420,11 @@ export default function WidgetConfigPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Show immediate local preview while uploading
+    // Immediate local preview while uploading
     const reader = new FileReader()
     reader.onload = (ev) => setAvatarPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
 
-    // Upload to backend storage
     setAvatarUploading(true)
     try {
       const formData = new FormData()
@@ -426,16 +433,25 @@ export default function WidgetConfigPage() {
         method: 'POST',
         body: formData,
       })
-      if (!res.ok) throw new Error('Upload failed')
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Upload failed (${res.status})`)
+      }
       const { url } = await res.json()
+
+      // Auto-save the avatar URL to DB immediately — no need to click Save separately
+      await saveTenant({ widget_agent_avatar_url: url })
       setAvatarUrl(url)
-      setSaved(false)
+      setAvatarPreview(url)
+      showToast('Avatar uploaded and saved')
     } catch (err) {
       console.error('Avatar upload failed:', err)
-      alert('Avatar upload failed. Please try again.')
       setAvatarPreview(avatarUrl) // revert preview
+      showToast(err instanceof Error ? err.message : 'Avatar upload failed', 'error')
     } finally {
       setAvatarUploading(false)
+      // Reset file input so the same file can be re-selected if needed
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -453,6 +469,18 @@ export default function WidgetConfigPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <Header />
+
+      {/* ── Toast notification ── */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-sm font-medium transition-all ${
+          toast.type === 'success'
+            ? 'bg-green-500/20 border border-green-500/30 text-green-300'
+            : 'bg-red-500/20 border border-red-500/30 text-red-300'
+        }`}>
+          <span>{toast.type === 'success' ? '✓' : '✕'}</span>
+          {toast.message}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         {/* Tab bar */}
@@ -552,9 +580,9 @@ export default function WidgetConfigPage() {
                             disabled={avatarUploading}
                             className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
                           >
-                            {avatarUploading ? 'Uploading…' : 'Upload image'}
+                            {avatarUploading ? 'Uploading & saving…' : avatarUrl ? 'Change image' : 'Upload image'}
                           </button>
-                          <p className="text-xs text-gray-600 mt-0.5">PNG, JPG · max 2 MB</p>
+                          <p className="text-xs text-gray-600 mt-0.5">PNG, JPG · max 2 MB · saves automatically</p>
                         </div>
                         <input
                           ref={fileInputRef}
