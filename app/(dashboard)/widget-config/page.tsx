@@ -45,7 +45,7 @@ const DEFAULT_CONFIG: WidgetConfig = {
   brandColor: '#6366f1',
   agentName: TENANT.agentName,
   welcomeMessageEn: 'Hi! How can I help you today?',
-  welcomeMessageUr: 'السلام علیکم! میں آپ کی کس طرح مدد کر سکتا ہوں؟',
+  welcomeMessageUr: 'السلام علیکم! میں آپ کی کس طرح مدد کر سکتی ہوں؟',
   bubblePosition: 'right',
   theme: 'dark',
   voiceEnabled: true,
@@ -326,6 +326,8 @@ export default function WidgetConfigPage() {
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -351,6 +353,11 @@ export default function WidgetConfigPage() {
           autoOpenSeconds:   data.widget_auto_open_seconds ?? prev.autoOpenSeconds,
           maxVoiceSessions:  data.widget_max_voice_sessions ?? prev.maxVoiceSessions,
         }))
+        // Load existing avatar
+        if (data.widget_agent_avatar_url) {
+          setAvatarUrl(data.widget_agent_avatar_url)
+          setAvatarPreview(data.widget_agent_avatar_url)
+        }
       } catch (err) {
         console.warn('Could not load widget config from backend, using defaults:', err)
       }
@@ -367,7 +374,7 @@ export default function WidgetConfigPage() {
     setSaving(true)
     try {
       // Map WidgetConfig fields → tenant_config DB fields
-      const payload = {
+      const payload: Record<string, unknown> = {
         widget_color:              config.brandColor,
         agent_name:                config.agentName,
         widget_welcome_message:    config.welcomeMessageEn,
@@ -377,6 +384,9 @@ export default function WidgetConfigPage() {
         widget_voice_enabled:      config.voiceEnabled,
         widget_auto_open_seconds:  config.autoOpenSeconds,
         widget_max_voice_sessions: config.maxVoiceSessions,
+      }
+      if (avatarUrl !== null) {
+        payload.widget_agent_avatar_url = avatarUrl
       }
 
       const res = await fetch(`/api/backend/api/admin/tenant/${TENANT.slug}`, {
@@ -398,12 +408,35 @@ export default function WidgetConfigPage() {
     }
   }
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    // Show immediate local preview while uploading
     const reader = new FileReader()
     reader.onload = (ev) => setAvatarPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
+
+    // Upload to backend storage
+    setAvatarUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('image', file)
+      const res = await fetch(`/api/backend/api/admin/upload-avatar`, {
+        method: 'POST',
+        body: formData,
+      })
+      if (!res.ok) throw new Error('Upload failed')
+      const { url } = await res.json()
+      setAvatarUrl(url)
+      setSaved(false)
+    } catch (err) {
+      console.error('Avatar upload failed:', err)
+      alert('Avatar upload failed. Please try again.')
+      setAvatarPreview(avatarUrl) // revert preview
+    } finally {
+      setAvatarUploading(false)
+    }
   }
 
   const handleCopy = () => {
@@ -516,9 +549,10 @@ export default function WidgetConfigPage() {
                         <div>
                           <button
                             onClick={() => fileInputRef.current?.click()}
-                            className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                            disabled={avatarUploading}
+                            className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
                           >
-                            Upload image
+                            {avatarUploading ? 'Uploading…' : 'Upload image'}
                           </button>
                           <p className="text-xs text-gray-600 mt-0.5">PNG, JPG · max 2 MB</p>
                         </div>
