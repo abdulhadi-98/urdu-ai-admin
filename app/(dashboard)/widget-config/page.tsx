@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Save,
   Palette,
@@ -16,11 +16,6 @@ import {
   FlaskConical,
   QrCode,
   Monitor,
-  Globe,
-  Users,
-  TrendingUp,
-  Calendar,
-  Zap,
   CheckCircle,
   Info,
   Bot,
@@ -28,23 +23,7 @@ import {
   Moon,
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts'
-import { format, subDays, parseISO, startOfDay, startOfWeek, startOfMonth } from 'date-fns'
 import Header from '@/components/layout/Header'
-import StatCard from '@/components/StatCard'
-import { supabaseAdmin, type Conversation, type AnalyticsEvent } from '@/lib/supabase'
 import { TENANT } from '@/lib/auth'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -75,7 +54,7 @@ const DEFAULT_CONFIG: WidgetConfig = {
   testMode: false,
 }
 
-const TABS = ['Appearance', 'Behavior', 'Installation', 'Analytics']
+const TABS = ['Appearance', 'Behavior', 'Installation']
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -350,11 +329,6 @@ export default function WidgetConfigPage() {
   const [previewOpen, setPreviewOpen] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Analytics state
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [analyticsEvents, setAnalyticsEvents] = useState<AnalyticsEvent[]>([])
-  const [analyticsLoading, setAnalyticsLoading] = useState(true)
-
   // Load config from backend DB on mount
   useEffect(() => {
     async function load() {
@@ -383,24 +357,6 @@ export default function WidgetConfigPage() {
     }
     load()
   }, [])
-
-  // Fetch analytics when tab is active
-  const fetchAnalytics = useCallback(async () => {
-    setAnalyticsLoading(true)
-    try {
-      const [convRes, evtRes] = await Promise.all([
-        supabaseAdmin.from('conversations').select('*').order('created_at', { ascending: false }),
-        supabaseAdmin.from('analytics_events').select('*').order('created_at', { ascending: false }),
-      ])
-      if (!convRes.error) setConversations(convRes.data ?? [])
-      if (!evtRes.error) setAnalyticsEvents((evtRes.data ?? []) as AnalyticsEvent[])
-    } catch {}
-    setAnalyticsLoading(false)
-  }, [])
-
-  useEffect(() => {
-    if (activeTab === 3) fetchAnalytics()
-  }, [activeTab, fetchAnalytics])
 
   const update = <K extends keyof WidgetConfig>(key: K, value: WidgetConfig[K]) => {
     setConfig((prev) => ({ ...prev, [key]: value }))
@@ -458,87 +414,6 @@ export default function WidgetConfigPage() {
 
   const embedCode = `<script src="https://agent.discretdigital.com/widget/${TENANT.slug}.js"${config.testMode ? ' data-test="true"' : ''}></script>`
   const widgetUrl = `https://agent.discretdigital.com/widget/${TENANT.slug}.js`
-
-  // ── Analytics computations ──────────────────────────────────────────────────
-  const now = new Date()
-
-  const sessionsToday = useMemo(() => {
-    const tod = startOfDay(now)
-    const s = new Set<string>()
-    conversations.forEach((c) => {
-      try { if (parseISO(c.created_at) >= tod) s.add(c.phone) } catch {}
-    })
-    return s.size
-  }, [conversations])
-
-  const sessionsWeek = useMemo(() => {
-    const wk = startOfWeek(now)
-    const s = new Set<string>()
-    conversations.forEach((c) => {
-      try { if (parseISO(c.created_at) >= wk) s.add(c.phone) } catch {}
-    })
-    return s.size
-  }, [conversations])
-
-  const sessionsMonth = useMemo(() => {
-    const mo = startOfMonth(now)
-    const s = new Set<string>()
-    conversations.forEach((c) => {
-      try { if (parseISO(c.created_at) >= mo) s.add(c.phone) } catch {}
-    })
-    return s.size
-  }, [conversations])
-
-  const voiceBreakdown = useMemo(() => {
-    const voice = conversations.filter((c) => c.is_voice).length
-    const text = conversations.length - voice
-    return [
-      { name: 'Text', value: text, color: '#6366f1' },
-      { name: 'Voice', value: voice, color: '#22c55e' },
-    ]
-  }, [conversations])
-
-  const avgConvLength = useMemo(() => {
-    const map: Record<string, number> = {}
-    conversations.forEach((c) => { map[c.phone] = (map[c.phone] ?? 0) + 1 })
-    const vals = Object.values(map)
-    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0
-  }, [conversations])
-
-  const voiceMinutes = useMemo(
-    () => conversations.filter((c) => c.is_voice).length * 2,
-    [conversations]
-  )
-
-  const conversionRate = useMemo(() => {
-    if (!conversations.length) return 0
-    const converted = conversations.filter((c) => c.needs_human || c.property_interest).length
-    return Math.round((converted / conversations.length) * 100)
-  }, [conversations])
-
-  const topPages = useMemo(() => {
-    const map: Record<string, number> = {}
-    analyticsEvents.forEach((e) => {
-      const ref = (e.metadata as Record<string, unknown>)?.referrer as string | undefined
-        || (e.metadata as Record<string, unknown>)?.page as string | undefined
-      if (ref) map[ref] = (map[ref] ?? 0) + 1
-    })
-    return Object.entries(map)
-      .map(([page, count]) => ({ page, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5)
-  }, [analyticsEvents])
-
-  const dailySessions = useMemo(() =>
-    Array.from({ length: 7 }, (_, i) => {
-      const date = subDays(now, 6 - i)
-      const dayStr = format(date, 'yyyy-MM-dd')
-      const s = new Set<string>()
-      conversations.forEach((c) => {
-        try { if (format(parseISO(c.created_at), 'yyyy-MM-dd') === dayStr) s.add(c.phone) } catch {}
-      })
-      return { date: format(date, 'MMM d'), sessions: s.size }
-    }), [conversations])
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
@@ -952,172 +827,8 @@ export default function WidgetConfigPage() {
             </div>
           )}
 
-          {/* ── ANALYTICS ───────────────────────────────────────────────────── */}
-          {activeTab === 3 && (
-            analyticsLoading ? (
-              <div className="flex items-center justify-center py-24">
-                <div className="flex flex-col items-center gap-3">
-                  <svg className="animate-spin h-8 w-8 text-indigo-500" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  <p className="text-sm text-gray-500">Loading analytics…</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-5">
-
-                {/* Stat cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                  <StatCard title="Sessions Today" value={sessionsToday} icon={Users} color="indigo" subtitle="Unique visitors" />
-                  <StatCard title="Sessions This Week" value={sessionsWeek} icon={TrendingUp} color="blue" subtitle="Unique visitors" />
-                  <StatCard title="Sessions This Month" value={sessionsMonth} icon={Calendar} color="purple" subtitle="Unique visitors" />
-                  <StatCard
-                    title="Avg Conv. Length"
-                    value={avgConvLength ? `${avgConvLength} msgs` : 'N/A'}
-                    icon={MessageSquare}
-                    color="green"
-                    subtitle="Messages per session"
-                  />
-                  <StatCard
-                    title="Lead Conversion Rate"
-                    value={`${conversionRate}%`}
-                    icon={Zap}
-                    color="yellow"
-                    subtitle="Visitor → engaged"
-                  />
-                  <StatCard
-                    title="Voice Minutes Used"
-                    value={`${voiceMinutes} min`}
-                    icon={Mic}
-                    color="red"
-                    subtitle="Est. total (2 min/msg)"
-                  />
-                </div>
-
-                {/* Charts row */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                  {/* Daily sessions bar chart */}
-                  <div className="lg:col-span-2 bg-dark-800 border border-dark-600 rounded-xl p-5">
-                    <h3 className="text-sm font-semibold text-white mb-4">Widget Sessions (Last 7 Days)</h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={dailySessions} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#22222e" />
-                        <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
-                        <Tooltip
-                          contentStyle={{
-                            background: '#1a1a2e',
-                            border: '1px solid #2a2a3e',
-                            borderRadius: 8,
-                            fontSize: 12,
-                          }}
-                        />
-                        <Bar dataKey="sessions" name="Sessions" fill={config.brandColor} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Text vs Voice donut */}
-                  <div className="bg-dark-800 border border-dark-600 rounded-xl p-5">
-                    <h3 className="text-sm font-semibold text-white mb-4">Text vs Voice</h3>
-                    {conversations.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                          <Pie
-                            data={voiceBreakdown}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={52}
-                            outerRadius={76}
-                            paddingAngle={3}
-                            dataKey="value"
-                          >
-                            {voiceBreakdown.map((entry, i) => (
-                              <Cell key={i} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            contentStyle={{
-                              background: '#1a1a2e',
-                              border: '1px solid #2a2a3e',
-                              borderRadius: 8,
-                              fontSize: 12,
-                            }}
-                          />
-                          <Legend
-                            iconType="circle"
-                            iconSize={8}
-                            wrapperStyle={{ fontSize: 11, color: '#9ca3af' }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-[200px] flex items-center justify-center text-gray-600 text-sm">
-                        No data yet
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Top pages */}
-                <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
-                  <div className="px-5 py-4 border-b border-dark-600 flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-blue-400" />
-                    <h3 className="text-sm font-semibold text-white">Top Pages — Referrer Tracking</h3>
-                  </div>
-                  {topPages.length === 0 ? (
-                    <div className="px-5 py-10 text-center">
-                      <p className="text-sm text-gray-500">No referrer data yet.</p>
-                      <p className="text-xs text-gray-600 mt-1.5 max-w-sm mx-auto">
-                        Pass{' '}
-                        <code className="bg-dark-700 px-1 rounded text-gray-400">referrer</code> or{' '}
-                        <code className="bg-dark-700 px-1 rounded text-gray-400">page</code> inside the{' '}
-                        <code className="bg-dark-700 px-1 rounded text-gray-400">metadata</code> field when
-                        logging analytics events from the widget.
-                      </p>
-                    </div>
-                  ) : (
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-dark-600">
-                          <th className="px-5 py-3 text-left text-xs text-gray-500 font-medium">Page / Referrer</th>
-                          <th className="px-5 py-3 text-right text-xs text-gray-500 font-medium">Sessions</th>
-                          <th className="px-5 py-3 text-right text-xs text-gray-500 font-medium">Share</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-dark-600">
-                        {topPages.map((row) => {
-                          const total = topPages.reduce((a, r) => a + r.count, 0)
-                          const share = total ? Math.round((row.count / total) * 100) : 0
-                          return (
-                            <tr key={row.page} className="hover:bg-dark-700/40 transition-colors">
-                              <td className="px-5 py-3 text-white font-mono text-xs truncate max-w-xs">{row.page}</td>
-                              <td className="px-5 py-3 text-right text-white font-medium">{row.count}</td>
-                              <td className="px-5 py-3 text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <div className="w-16 h-1.5 bg-dark-600 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full rounded-full bg-indigo-500"
-                                      style={{ width: `${share}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-gray-400 text-xs w-8 text-right">{share}%</span>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              </div>
-            )
-          )}
-
-          {/* Save button — not shown on Analytics tab */}
-          {activeTab !== 3 && (
+          {/* Save button */}
+          {(
             <div className="flex items-center justify-end gap-3 pt-2 pb-2">
               {saved && (
                 <span className="text-sm text-green-400 flex items-center gap-1.5">

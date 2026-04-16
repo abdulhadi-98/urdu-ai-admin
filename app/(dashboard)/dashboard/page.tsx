@@ -17,8 +17,10 @@ import {
   Legend,
   ComposedChart,
   Line,
+  PieChart,
+  Pie,
 } from 'recharts'
-import { format, subDays, parseISO, subMonths, startOfMonth } from 'date-fns'
+import { format, subDays, parseISO, subMonths, startOfMonth, startOfDay, startOfWeek } from 'date-fns'
 import {
   MessageSquare,
   Mic,
@@ -30,6 +32,8 @@ import {
   BarChart2,
   Calendar,
   Flame,
+  Globe,
+  Monitor,
 } from 'lucide-react'
 import { supabaseAdmin, type Conversation, type AnalyticsEvent } from '@/lib/supabase'
 import StatCard from '@/components/StatCard'
@@ -73,7 +77,7 @@ export default function DashboardPage() {
           .order('created_at', { ascending: false }),
         supabaseAdmin
           .from('analytics_events')
-          .select('id,event_type,lead_source,created_at,phone')
+          .select('id,event_type,lead_source,created_at,phone,metadata')
           .order('created_at', { ascending: false }),
       ])
       if (!convRes.error) setConversations(convRes.data ?? [])
@@ -192,6 +196,76 @@ export default function DashboardPage() {
     return Object.entries(map)
       .map(([channel, { leads, conversions }]) => ({ channel, leads, conversions }))
       .sort((a, b) => b.leads - a.leads)
+  }, [analyticsEvents])
+
+  // ── Widget / website analytics ───────────────────────────────────────────────
+  const widgetConvs = useMemo(
+    () => conversations.filter((c) => c.source === 'website' || c.phone?.startsWith('visitor_') || c.phone?.startsWith('widget_')),
+    [conversations]
+  )
+
+  const now = new Date()
+
+  const widgetSessionsToday = useMemo(() => {
+    const tod = startOfDay(now)
+    const s = new Set<string>()
+    widgetConvs.forEach((c) => { try { if (parseISO(c.created_at) >= tod) s.add(c.phone) } catch {} })
+    return s.size
+  }, [widgetConvs])
+
+  const widgetSessionsWeek = useMemo(() => {
+    const wk = startOfWeek(now)
+    const s = new Set<string>()
+    widgetConvs.forEach((c) => { try { if (parseISO(c.created_at) >= wk) s.add(c.phone) } catch {} })
+    return s.size
+  }, [widgetConvs])
+
+  const widgetSessionsMonth = useMemo(() => {
+    const mo = startOfMonth(now)
+    const s = new Set<string>()
+    widgetConvs.forEach((c) => { try { if (parseISO(c.created_at) >= mo) s.add(c.phone) } catch {} })
+    return s.size
+  }, [widgetConvs])
+
+  const widgetVoiceBreakdown = useMemo(() => {
+    const voice = widgetConvs.filter((c) => c.is_voice).length
+    const text = widgetConvs.length - voice
+    return [
+      { name: 'Text', value: text, color: '#6366f1' },
+      { name: 'Voice', value: voice, color: '#22c55e' },
+    ]
+  }, [widgetConvs])
+
+  const widgetConvRate = useMemo(() => {
+    if (!widgetConvs.length) return 0
+    const converted = widgetConvs.filter((c) => c.needs_human || c.property_interest).length
+    return Math.round((converted / widgetConvs.length) * 100)
+  }, [widgetConvs])
+
+  const widgetDailySessions = useMemo(() =>
+    Array.from({ length: 7 }, (_, i) => {
+      const date = subDays(now, 6 - i)
+      const dayStr = format(date, 'yyyy-MM-dd')
+      const s = new Set<string>()
+      widgetConvs.forEach((c) => {
+        try { if (format(parseISO(c.created_at), 'yyyy-MM-dd') === dayStr) s.add(c.phone) } catch {}
+      })
+      return { date: format(date, 'MMM d'), sessions: s.size }
+    }),
+    [widgetConvs]
+  )
+
+  const topPages = useMemo(() => {
+    const map: Record<string, number> = {}
+    analyticsEvents.forEach((e) => {
+      const meta = e.metadata as Record<string, unknown> | null
+      const ref = (meta?.referrer ?? meta?.page) as string | undefined
+      if (ref) map[ref] = (map[ref] ?? 0) + 1
+    })
+    return Object.entries(map)
+      .map(([page, count]) => ({ page, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
   }, [analyticsEvents])
 
   const CustomTooltip = ({ active, payload, label }: Record<string, unknown>) => {
@@ -444,6 +518,114 @@ export default function DashboardPage() {
               </table>
             </div>
           )}
+        </div>
+
+        {/* ── Website Widget Analytics ─────────────────────────────────────────── */}
+        <div className="border-t border-dark-600 pt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Monitor className="w-4 h-4 text-indigo-400" />
+            <h2 className="text-sm font-semibold text-white">Website Widget Analytics</h2>
+            <span className="text-xs text-gray-500 ml-1">— visitors from the embedded chat widget</span>
+          </div>
+
+          {/* Widget stat cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+            <StatCard title="Widget Sessions Today" value={widgetSessionsToday} icon={Users} color="indigo" subtitle="Unique visitors" />
+            <StatCard title="Sessions This Week" value={widgetSessionsWeek} icon={TrendingUp} color="blue" subtitle="Unique visitors" />
+            <StatCard title="Sessions This Month" value={widgetSessionsMonth} icon={Calendar} color="purple" subtitle="Unique visitors" />
+            <StatCard title="Lead Conv. Rate" value={`${widgetConvRate}%`} icon={Zap} color="yellow" subtitle="Visitor → engaged" />
+          </div>
+
+          {/* Widget charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+            {/* Daily sessions */}
+            <div className="lg:col-span-2 bg-dark-800 border border-dark-600 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-white mb-4">Widget Sessions (Last 7 Days)</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={widgetDailySessions} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#22222e" />
+                  <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="sessions" name="Sessions" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Text vs Voice donut */}
+            <div className="bg-dark-800 border border-dark-600 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-white mb-4">Text vs Voice</h3>
+              {widgetConvs.length > 0 ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={widgetVoiceBreakdown}
+                      cx="50%" cy="50%"
+                      innerRadius={52} outerRadius={76}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {widgetVoiceBreakdown.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #2a2a3e', borderRadius: 8, fontSize: 12 }} />
+                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[200px] flex items-center justify-center text-gray-600 text-sm">No widget sessions yet</div>
+              )}
+            </div>
+          </div>
+
+          {/* Top pages */}
+          <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden mb-5">
+            <div className="px-5 py-4 border-b border-dark-600 flex items-center gap-2">
+              <Globe className="w-4 h-4 text-blue-400" />
+              <h3 className="text-sm font-semibold text-white">Top Pages — Referrer Tracking</h3>
+            </div>
+            {topPages.length === 0 ? (
+              <div className="px-5 py-8 text-center">
+                <p className="text-sm text-gray-500">No referrer data yet.</p>
+                <p className="text-xs text-gray-600 mt-1">
+                  Pass <code className="bg-dark-700 px-1 rounded">referrer</code> or{' '}
+                  <code className="bg-dark-700 px-1 rounded">page</code> in the{' '}
+                  <code className="bg-dark-700 px-1 rounded">metadata</code> field when logging analytics events.
+                </p>
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-dark-600">
+                    <th className="px-5 py-3 text-left text-xs text-gray-500 font-medium">Page / Referrer</th>
+                    <th className="px-5 py-3 text-right text-xs text-gray-500 font-medium">Sessions</th>
+                    <th className="px-5 py-3 text-right text-xs text-gray-500 font-medium">Share</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dark-600">
+                  {topPages.map((row) => {
+                    const total = topPages.reduce((a, r) => a + r.count, 0)
+                    const share = total ? Math.round((row.count / total) * 100) : 0
+                    return (
+                      <tr key={row.page} className="hover:bg-dark-700/40 transition-colors">
+                        <td className="px-5 py-3 text-white font-mono text-xs truncate max-w-xs">{row.page}</td>
+                        <td className="px-5 py-3 text-right text-white font-medium">{row.count}</td>
+                        <td className="px-5 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-16 h-1.5 bg-dark-600 rounded-full overflow-hidden">
+                              <div className="h-full rounded-full bg-indigo-500" style={{ width: `${share}%` }} />
+                            </div>
+                            <span className="text-gray-400 text-xs w-8 text-right">{share}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
 
         {/* ── Recent Conversations ─────────────────────────────────────────────── */}
