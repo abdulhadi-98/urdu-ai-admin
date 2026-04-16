@@ -19,6 +19,9 @@ import {
   CheckCircle,
   Wifi,
   WifiOff,
+  UserCheck,
+  Bot,
+  HandMetal,
 } from 'lucide-react'
 import { supabaseAdmin, type Conversation } from '@/lib/supabase'
 import AudioPlayer from '@/components/AudioPlayer'
@@ -119,6 +122,10 @@ export default function ConversationsPage() {
   const [linking, setLinking]           = useState(false)
   const [linkSuccess, setLinkSuccess]   = useState(false)
 
+  // Human takeover
+  const [pausedPhones, setPausedPhones] = useState<Set<string>>(new Set())
+  const [takeoverLoading, setTakeoverLoading] = useState(false)
+
   const chatEndRef       = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef        = useRef<Blob[]>([])
@@ -152,6 +159,56 @@ export default function ConversationsPage() {
       .sort((a, b) => (b.latestTime > a.latestTime ? 1 : -1))
   }, [])
 
+  // ── Fetch paused phones (human takeover state) ─────────────────────────────
+  const fetchPausedPhones = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/admin/conversations/paused`)
+      if (res.ok) {
+        const data = await res.json()
+        setPausedPhones(new Set(data.phones ?? []))
+      }
+    } catch {}
+  }, [])
+
+  // ── Human takeover handlers ─────────────────────────────────────────────────
+  const handleTakeover = async () => {
+    if (!selectedPhone) return
+    setTakeoverLoading(true)
+    try {
+      const res = await fetch(
+        `${API_URL}/api/admin/conversations/${encodeURIComponent(selectedPhone)}/pause`,
+        { method: 'POST' }
+      )
+      if (res.ok) setPausedPhones((prev) => new Set([...prev, selectedPhone]))
+    } catch {
+      setSendError('Failed to activate takeover.')
+    } finally {
+      setTakeoverLoading(false)
+    }
+  }
+
+  const handleResumeAI = async () => {
+    if (!selectedPhone) return
+    setTakeoverLoading(true)
+    try {
+      const res = await fetch(
+        `${API_URL}/api/admin/conversations/${encodeURIComponent(selectedPhone)}/pause`,
+        { method: 'DELETE' }
+      )
+      if (res.ok) {
+        setPausedPhones((prev) => {
+          const next = new Set(prev)
+          next.delete(selectedPhone)
+          return next
+        })
+      }
+    } catch {
+      setSendError('Failed to resume AI.')
+    } finally {
+      setTakeoverLoading(false)
+    }
+  }
+
   // ── Fetch all conversations ─────────────────────────────────────────────────
   const fetchConversations = useCallback(async () => {
     try {
@@ -174,9 +231,10 @@ export default function ConversationsPage() {
   // ── Initial load + polling fallback ────────────────────────────────────────
   useEffect(() => {
     fetchConversations()
-    const interval = setInterval(fetchConversations, 8_000)
+    fetchPausedPhones()
+    const interval = setInterval(() => { fetchConversations(); fetchPausedPhones() }, 8_000)
     return () => clearInterval(interval)
-  }, [fetchConversations])
+  }, [fetchConversations, fetchPausedPhones])
 
   // ── SSE realtime ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -374,6 +432,7 @@ export default function ConversationsPage() {
 
   const selectedContact = contacts.find((c) => c.phone === selectedPhone)
   const selectedIsWeb   = selectedContact?.source === 'website'
+  const isAIPaused      = !selectedIsWeb && selectedPhone ? pausedPhones.has(selectedPhone) : false
   const grouped         = groupByDate(thread)
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -562,6 +621,14 @@ export default function ConversationsPage() {
                         Escalated
                       </span>
                     )}
+
+                    {/* Human takeover status badge — WhatsApp only */}
+                    {!selectedIsWeb && isAIPaused && (
+                      <span className="flex items-center gap-1 text-[10px] text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-full px-2 py-0.5">
+                        <UserCheck className="w-3 h-3" />
+                        Human handling
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-3 mt-0.5">
@@ -605,6 +672,31 @@ export default function ConversationsPage() {
                     <Link2 className="w-3.5 h-3.5" />
                     Link to Lead
                   </button>
+                )}
+
+                {/* Human takeover button — WhatsApp only */}
+                {!selectedIsWeb && (
+                  isAIPaused ? (
+                    <button
+                      onClick={handleResumeAI}
+                      disabled={takeoverLoading}
+                      title="Resume AI — hand the conversation back to the bot"
+                      className="flex items-center gap-1.5 text-xs text-green-400 hover:text-green-300 border border-green-500/30 hover:border-green-500/60 bg-green-500/10 rounded-lg px-3 py-1.5 transition-colors shrink-0 disabled:opacity-50"
+                    >
+                      {takeoverLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
+                      Resume AI
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleTakeover}
+                      disabled={takeoverLoading}
+                      title="Take Over — pause AI and handle this conversation manually"
+                      className="flex items-center gap-1.5 text-xs text-yellow-400 hover:text-yellow-300 border border-yellow-500/30 hover:border-yellow-500/60 bg-yellow-500/10 rounded-lg px-3 py-1.5 transition-colors shrink-0 disabled:opacity-50"
+                    >
+                      {takeoverLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserCheck className="w-3.5 h-3.5" />}
+                      Take Over
+                    </button>
+                  )
                 )}
               </div>
 
@@ -740,6 +832,12 @@ export default function ConversationsPage() {
                   <button onClick={() => setSendError('')}>
                     <X className="w-3.5 h-3.5 text-red-400" />
                   </button>
+                </div>
+              )}
+              {isAIPaused && (
+                <div className="flex items-center gap-1.5 mb-2 text-xs text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2">
+                  <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                  <span>You are in control — AI is paused. Type below to reply as a human agent. Click <strong>Resume AI</strong> when done.</span>
                 </div>
               )}
               {selectedIsWeb && (

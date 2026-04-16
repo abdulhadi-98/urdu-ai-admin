@@ -21,6 +21,7 @@ import {
   Pie,
 } from 'recharts'
 import { format, subDays, parseISO, subMonths, startOfMonth, startOfDay, startOfWeek } from 'date-fns'
+import Link from 'next/link'
 import {
   MessageSquare,
   Mic,
@@ -34,6 +35,8 @@ import {
   Flame,
   Globe,
   Monitor,
+  Phone,
+  ExternalLink,
 } from 'lucide-react'
 import { supabaseAdmin, type Conversation, type AnalyticsEvent } from '@/lib/supabase'
 import StatCard from '@/components/StatCard'
@@ -138,7 +141,29 @@ export default function DashboardPage() {
   })
   const recentContacts = Object.values(phoneMap)
     .sort((a, b) => (b.created_at > a.created_at ? 1 : -1))
-    .slice(0, 5)
+    .slice(0, 10)
+
+  // ── Escalation queue ─────────────────────────────────────────────────────────
+  // Unique contacts that need human intervention, most recent first
+  const escalationMap: Record<string, Conversation> = {}
+  conversations.forEach((c) => {
+    if (c.needs_human) {
+      if (!escalationMap[c.phone] || c.created_at > escalationMap[c.phone].created_at) {
+        escalationMap[c.phone] = c
+      }
+    }
+  })
+  const escalationQueue = Object.values(escalationMap)
+    .sort((a, b) => (b.created_at > a.created_at ? 1 : -1))
+    .slice(0, 8)
+
+  // ── Web sessions stats ───────────────────────────────────────────────────────
+  const webContactsCount = Object.values(phoneMap).filter(
+    (c) => c.source === 'website' || c.phone?.startsWith('visitor_') || c.phone?.startsWith('widget_')
+  ).length
+  const whatsappContactsCount = Object.values(phoneMap).filter(
+    (c) => c.source !== 'website' && !c.phone?.startsWith('visitor_') && !c.phone?.startsWith('widget_')
+  ).length
 
   // ── Heatmap: day × hour ──────────────────────────────────────────────────────
   const heatmapGrid = useMemo(() => {
@@ -314,8 +339,8 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard title="Unique Contacts" value={uniquePhones.toLocaleString()} icon={Users} color="purple" subtitle="Active leads" />
           <StatCard title="7-Day Messages" value={last7Days.reduce((a, d) => a + d.messages, 0).toLocaleString()} icon={TrendingUp} color="indigo" subtitle="Last 7 days" />
-          <StatCard title="Voice Rate" value={`${totalMessages ? Math.round((voiceMessages / totalMessages) * 100) : 0}%`} icon={Mic} color="green" subtitle="Voice vs text ratio" />
-          <StatCard title="Escalation Rate" value={`${totalMessages ? Math.round((escalations / totalMessages) * 100) : 0}%`} icon={Zap} color="red" subtitle="Needs human" />
+          <StatCard title="WhatsApp Contacts" value={whatsappContactsCount.toLocaleString()} icon={Phone} color="green" subtitle="WhatsApp leads" />
+          <StatCard title="Web Contacts" value={webContactsCount.toLocaleString()} icon={Globe} color="blue" subtitle="Website visitors" />
         </div>
 
         {/* ── 7-day + property charts ─────────────────────────────────────────── */}
@@ -628,33 +653,103 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ── Escalation Queue ─────────────────────────────────────────────────── */}
+        {escalationQueue.length > 0 && (
+          <div className="bg-dark-800 border border-yellow-500/20 rounded-xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-yellow-500/15 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-yellow-400" />
+                <h3 className="text-sm font-semibold text-white">Escalation Queue</h3>
+                <span className="text-xs bg-yellow-500/15 text-yellow-400 border border-yellow-500/20 rounded-full px-2 py-0.5">
+                  {escalationQueue.length} pending
+                </span>
+              </div>
+              <Link
+                href="/conversations"
+                className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                Handle all <ExternalLink className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="divide-y divide-dark-600">
+              {escalationQueue.map((conv) => {
+                const isWeb = conv.source === 'website' || conv.phone?.startsWith('visitor_') || conv.phone?.startsWith('widget_')
+                return (
+                  <div key={conv.phone} className="flex items-center gap-4 px-5 py-3.5 hover:bg-dark-700/50 transition-colors">
+                    {isWeb ? (
+                      <div className="w-9 h-9 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
+                        <Globe className="w-4 h-4 text-blue-400" />
+                      </div>
+                    ) : (
+                      <div className={`w-9 h-9 rounded-full ${getAvatarColor(conv.phone)} flex items-center justify-center shrink-0`}>
+                        <span className="text-xs font-bold text-white">{getInitials(conv.name, conv.phone)}</span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-white truncate">{conv.name ?? formatPhone(conv.phone)}</p>
+                        <p className="text-xs text-gray-500 shrink-0">{format(parseISO(conv.created_at), 'MMM d, h:mm a')}</p>
+                      </div>
+                      <p className="text-xs text-yellow-500/80 truncate mt-0.5">{conv.escalation_reason ?? conv.user_message ?? '—'}</p>
+                    </div>
+                    <Link
+                      href="/conversations"
+                      className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/40 bg-indigo-500/10 rounded-lg px-2.5 py-1.5 transition-colors shrink-0"
+                    >
+                      View
+                    </Link>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ── Recent Conversations ─────────────────────────────────────────────── */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-dark-600">
+          <div className="px-5 py-4 border-b border-dark-600 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white">Recent Conversations</h3>
+            <Link
+              href="/conversations"
+              className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+            >
+              View all <ExternalLink className="w-3 h-3" />
+            </Link>
           </div>
           <div className="divide-y divide-dark-600">
             {recentContacts.length === 0 ? (
               <div className="px-5 py-10 text-center text-gray-600 text-sm">No conversations yet</div>
             ) : (
-              recentContacts.map((conv) => (
-                <div key={conv.phone} className="flex items-center gap-4 px-5 py-3.5 hover:bg-dark-700/50 transition-colors">
-                  <div className={`w-9 h-9 rounded-full ${getAvatarColor(conv.phone)} flex items-center justify-center shrink-0`}>
-                    <span className="text-xs font-bold text-white">{getInitials(conv.name, conv.phone)}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-white truncate">{conv.name ?? formatPhone(conv.phone)}</p>
-                      <p className="text-xs text-gray-500 shrink-0">{format(parseISO(conv.created_at), 'MMM d, h:mm a')}</p>
+              recentContacts.map((conv) => {
+                const isWeb = conv.source === 'website' || conv.phone?.startsWith('visitor_') || conv.phone?.startsWith('widget_')
+                return (
+                  <div key={conv.phone} className="flex items-center gap-4 px-5 py-3.5 hover:bg-dark-700/50 transition-colors">
+                    {isWeb ? (
+                      <div className="w-9 h-9 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
+                        <Globe className="w-4 h-4 text-blue-400" />
+                      </div>
+                    ) : (
+                      <div className={`w-9 h-9 rounded-full ${getAvatarColor(conv.phone)} flex items-center justify-center shrink-0`}>
+                        <span className="text-xs font-bold text-white">{getInitials(conv.name, conv.phone)}</span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-sm font-medium text-white truncate">{conv.name ?? formatPhone(conv.phone)}</p>
+                        {isWeb && (
+                          <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20 font-medium">Web</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 truncate">{conv.user_message ?? '(voice message)'}</p>
                     </div>
-                    <p className="text-xs text-gray-500 truncate mt-0.5">{conv.user_message ?? '(voice message)'}</p>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <p className="text-xs text-gray-600">{format(parseISO(conv.created_at), 'MMM d, h:mm a')}</p>
+                      {conv.is_voice && <span className="px-1.5 py-0.5 text-xs rounded bg-green-500/15 text-green-400 border border-green-500/20">Voice</span>}
+                      {conv.needs_human && <span className="px-1.5 py-0.5 text-xs rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">Escalated</span>}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {conv.is_voice && <span className="px-1.5 py-0.5 text-xs rounded bg-green-500/15 text-green-400 border border-green-500/20">Voice</span>}
-                    {conv.needs_human && <span className="px-1.5 py-0.5 text-xs rounded bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">Escalated</span>}
-                  </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>
