@@ -15,7 +15,9 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   'http://localhost:3000'
 
-const SKIP = new Set(['host', 'connection', 'transfer-encoding', 'content-length'])
+// Strip hop-by-hop headers and Origin — this is a server-to-server proxy call,
+// forwarding the browser's Origin causes the backend CORS middleware to block it.
+const SKIP = new Set(['host', 'connection', 'transfer-encoding', 'content-length', 'origin', 'referer'])
 
 async function proxy(req: NextRequest, { params }: { params: { path: string[] } }) {
   const path = (params.path ?? []).join('/')
