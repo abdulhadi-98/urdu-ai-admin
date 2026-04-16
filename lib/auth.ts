@@ -1,8 +1,12 @@
-const AUTH_KEY = 'admin_authed'
+const AUTH_KEY   = 'admin_authed'
+const EXPIRY_KEY = 'admin_expiry'
+
+/** Session lifetime — 20 minutes */
+const SESSION_MS = 20 * 60 * 1000
 
 /**
  * Verifies the password server-side (against DB, then env var).
- * Password is never stored or compared in client code.
+ * Stores an expiry timestamp (now + 20 min) on success.
  */
 export async function login(password: string): Promise<boolean> {
   try {
@@ -13,7 +17,10 @@ export async function login(password: string): Promise<boolean> {
     })
     const data = await res.json()
     if (data.success) {
-      if (typeof window !== 'undefined') sessionStorage.setItem(AUTH_KEY, 'true')
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(AUTH_KEY, 'true')
+        sessionStorage.setItem(EXPIRY_KEY, String(Date.now() + SESSION_MS))
+      }
       return true
     }
     return false
@@ -25,12 +32,32 @@ export async function login(password: string): Promise<boolean> {
 export function logout(): void {
   if (typeof window !== 'undefined') {
     sessionStorage.removeItem(AUTH_KEY)
+    sessionStorage.removeItem(EXPIRY_KEY)
   }
 }
 
+/** Returns true only if the session exists AND hasn't expired */
 export function isAuthenticated(): boolean {
   if (typeof window === 'undefined') return false
-  return sessionStorage.getItem(AUTH_KEY) === 'true'
+  if (sessionStorage.getItem(AUTH_KEY) !== 'true') return false
+  const expiry = Number(sessionStorage.getItem(EXPIRY_KEY) ?? 0)
+  if (Date.now() > expiry) {
+    // Session timed out — clear storage so next check is instant
+    sessionStorage.removeItem(AUTH_KEY)
+    sessionStorage.removeItem(EXPIRY_KEY)
+    return false
+  }
+  return true
+}
+
+/**
+ * Refresh the session expiry — call this on meaningful user activity.
+ * Silently does nothing if the session has already expired.
+ */
+export function refreshSession(): void {
+  if (typeof window === 'undefined') return
+  if (sessionStorage.getItem(AUTH_KEY) !== 'true') return
+  sessionStorage.setItem(EXPIRY_KEY, String(Date.now() + SESSION_MS))
 }
 
 export const TENANT = {
