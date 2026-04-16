@@ -179,7 +179,7 @@ export default function ConversationsPage() {
         `${API_URL}/api/admin/conversations/${encodeURIComponent(selectedPhone)}/pause`,
         { method: 'POST' }
       )
-      if (res.ok) setPausedPhones((prev) => new Set([...prev, selectedPhone]))
+      if (res.ok) setPausedPhones((prev) => new Set(Array.from(prev).concat(selectedPhone)))
     } catch {
       setSendError('Failed to activate takeover.')
     } finally {
