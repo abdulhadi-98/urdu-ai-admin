@@ -3,48 +3,55 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { login, isAuthenticated } from '@/lib/auth'
-import { Eye, EyeOff, Bot, Lock, Mail, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Bot, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail]           = useState('')
+  const [password, setPassword]     = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [error, setError]           = useState('')
+  const [loading, setLoading]       = useState(false)
+  const [checking, setChecking]     = useState(true)
 
+  // Redirect to dashboard if already logged in
   useEffect(() => {
-    if (isAuthenticated()) {
-      router.replace('/dashboard')
-    }
+    isAuthenticated().then((ok) => {
+      if (ok) router.replace('/dashboard')
+      else setChecking(false)
+    })
   }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    if (!email.trim()) { setError('Email is required'); return }
+    if (!password)     { setError('Password is required'); return }
+
     setLoading(true)
-
-    await new Promise((r) => setTimeout(r, 400))
-
-    if (!email) {
-      setError('Email is required')
-      setLoading(false)
-      return
-    }
-
-    const success = await login(password)
-    if (success) {
+    const result = await login(email, password)
+    if (result.success) {
       router.replace('/dashboard')
     } else {
-      setError('Invalid password. Please try again.')
+      setError(result.error ?? 'Invalid credentials')
       setLoading(false)
     }
+  }
+
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-dark-900 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+      </div>
+    )
   }
 
   return (
     <div className="min-h-screen bg-dark-900 flex items-center justify-center px-4">
       <div className="w-full max-w-md">
-        {/* Logo & Title */}
+
+        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 mb-4">
             <Bot className="w-8 h-8 text-indigo-400" />
@@ -53,7 +60,7 @@ export default function LoginPage() {
           <p className="text-gray-400 mt-1 text-sm">Discret Digital Dashboard</p>
         </div>
 
-        {/* Login Card */}
+        {/* Card */}
         <div className="bg-dark-800 border border-dark-600 rounded-2xl p-8">
           <h2 className="text-lg font-semibold text-white mb-6">Sign in to your account</h2>
 
@@ -70,6 +77,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="admin@discret.digital"
+                  autoComplete="email"
                   className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-colors"
                 />
               </div>
@@ -86,7 +94,8 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter admin password"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
                   className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-colors"
                 />
                 <button
@@ -111,19 +120,12 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium rounded-lg py-2.5 text-sm transition-colors mt-2"
+              className="w-full bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-medium rounded-lg py-2.5 text-sm transition-colors mt-2 flex items-center justify-center gap-2"
             >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Signing in...
-                </span>
-              ) : (
-                'Sign in'
-              )}
+              {loading
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in…</>
+                : 'Sign in'
+              }
             </button>
           </form>
         </div>

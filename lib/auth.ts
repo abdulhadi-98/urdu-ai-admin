@@ -1,67 +1,69 @@
-const AUTH_KEY   = 'admin_authed'
-const EXPIRY_KEY = 'admin_expiry'
-
-/** Session lifetime — 20 minutes */
-const SESSION_MS = 20 * 60 * 1000
-
 /**
- * Verifies the password server-side (against DB, then env var).
- * Stores an expiry timestamp (now + 20 min) on success.
+ * Client-side auth helpers.
+ *
+ * The actual session is an httpOnly JWT cookie — client JS cannot read it.
+ * Auth state is checked via GET /api/auth/me (server validates the cookie).
  */
-export async function login(password: string): Promise<boolean> {
-  try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    })
-    const data = await res.json()
-    if (data.success) {
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem(AUTH_KEY, 'true')
-        sessionStorage.setItem(EXPIRY_KEY, String(Date.now() + SESSION_MS))
-      }
-      return true
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
-export function logout(): void {
-  if (typeof window !== 'undefined') {
-    sessionStorage.removeItem(AUTH_KEY)
-    sessionStorage.removeItem(EXPIRY_KEY)
-  }
-}
-
-/** Returns true only if the session exists AND hasn't expired */
-export function isAuthenticated(): boolean {
-  if (typeof window === 'undefined') return false
-  if (sessionStorage.getItem(AUTH_KEY) !== 'true') return false
-  const expiry = Number(sessionStorage.getItem(EXPIRY_KEY) ?? 0)
-  if (Date.now() > expiry) {
-    // Session timed out — clear storage so next check is instant
-    sessionStorage.removeItem(AUTH_KEY)
-    sessionStorage.removeItem(EXPIRY_KEY)
-    return false
-  }
-  return true
-}
-
-/**
- * Refresh the session expiry — call this on meaningful user activity.
- * Silently does nothing if the session has already expired.
- */
-export function refreshSession(): void {
-  if (typeof window === 'undefined') return
-  if (sessionStorage.getItem(AUTH_KEY) !== 'true') return
-  sessionStorage.setItem(EXPIRY_KEY, String(Date.now() + SESSION_MS))
-}
 
 export const TENANT = {
-  name: 'Discret Digital',
-  slug: 'discret',
+  name:      'Discret Digital',
+  slug:      'discret',
   agentName: 'Urdu AI Agent',
+}
+
+export interface AdminUser {
+  id:    string
+  email: string
+  name:  string
+  role:  string
+}
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+
+export async function login(
+  email: string,
+  password: string
+): Promise<{ success: boolean; error?: string; user?: Pick<AdminUser, 'name' | 'role'> }> {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ email: email.trim().toLowerCase(), password }),
+    })
+    const data = await res.json()
+    if (res.ok && data.success) return { success: true, user: { name: data.name, role: data.role } }
+    return { success: false, error: data.error ?? 'Login failed' }
+  } catch {
+    return { success: false, error: 'Network error — check your connection' }
+  }
+}
+
+// ── Logout ────────────────────────────────────────────────────────────────────
+
+export async function logout(): Promise<void> {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' })
+  } catch { /* ignore */ }
+}
+
+// ── Session check ─────────────────────────────────────────────────────────────
+// Calls /api/auth/me — middleware validates the cookie server-side.
+// Returns null if the session is missing or expired.
+
+export async function getSession(): Promise<AdminUser | null> {
+  try {
+    const res = await fetch('/api/auth/me', { cache: 'no-store' })
+    if (!res.ok) return null
+    return res.json() as Promise<AdminUser>
+  } catch {
+    return null
+  }
+}
+
+// ── isAuthenticated (async) ───────────────────────────────────────────────────
+// Use in useEffect — not synchronous like the old version.
+
+export async function isAuthenticated(): Promise<boolean> {
+  const session = await getSession()
+  return session !== null
 }
