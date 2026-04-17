@@ -9,9 +9,9 @@ import {
   Server, Users, UserPlus, KeyRound, ShieldCheck, ShieldOff, Trash2,
 } from 'lucide-react'
 import Header from '@/components/layout/Header'
-import { TENANT } from '@/lib/auth'
 import { useUser } from '@/lib/user-context'
 import { roleLabel, roleColor, type Role } from '@/lib/roles'
+import { useBranding } from '@/lib/branding-context'
 import { cn } from '@/lib/utils'
 
 const BACKEND = '/api/backend'
@@ -79,6 +79,7 @@ function StatusBadge({ status }: { status: ServiceStatus }) {
 export default function SettingsPage() {
   const currentUser = useUser()
   const canManage   = currentUser?.role === 'super_admin' || currentUser?.role === 'admin'
+  const branding    = useBranding()
 
   // ── System status ──────────────────────────────────────────────────────────
   const [services, setServices]           = useState<ServiceItem[]>(PLACEHOLDER_SERVICES)
@@ -515,20 +516,21 @@ export default function SettingsPage() {
             <h3 className="text-sm font-semibold text-white flex items-center gap-2">
               <Bot className="w-4 h-4 text-indigo-400" /> Tenant Information
             </h3>
+            <p className="text-xs text-gray-500 mt-0.5">Sourced from branding settings</p>
           </div>
           <div className="p-5">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1.5">Organization Name</label>
-                <div className="bg-dark-700 border border-dark-600 rounded-lg px-4 py-2.5 text-sm text-white">{TENANT.name}</div>
+                <div className="bg-dark-700 border border-dark-600 rounded-lg px-4 py-2.5 text-sm text-white">{branding.orgName || '—'}</div>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1.5">Slug</label>
-                <div className="bg-dark-700 border border-dark-600 rounded-lg px-4 py-2.5 text-sm text-white font-mono">{TENANT.slug}</div>
+                <div className="bg-dark-700 border border-dark-600 rounded-lg px-4 py-2.5 text-sm text-white font-mono">{branding.slug || '—'}</div>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1.5">Agent Name</label>
-                <div className="bg-dark-700 border border-dark-600 rounded-lg px-4 py-2.5 text-sm text-white">{TENANT.agentName}</div>
+                <div className="bg-dark-700 border border-dark-600 rounded-lg px-4 py-2.5 text-sm text-white">{branding.agentName || '—'}</div>
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1.5">API URL</label>
@@ -569,7 +571,7 @@ export default function SettingsPage() {
               <Bot className="w-6 h-6 text-indigo-400" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-white">Urdu AI Admin Dashboard</p>
+              <p className="text-sm font-semibold text-white">Discret AI Agentic Platform</p>
               <p className="text-xs text-gray-500 mt-0.5">v0.1.0 · Next.js 14 · Discret Digital</p>
             </div>
           </div>
