@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { login, isAuthenticated } from '@/lib/auth'
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, ExternalLink } from 'lucide-react'
+import { LOGO_COLORED, LOGO_PLAIN } from '@/lib/logos'
+
 const WEBSITE_URL = 'https://www.discretdigital.com'
 
 export default function LoginPage() {
@@ -61,7 +63,7 @@ export default function LoginPage() {
           title="Visit Discret Digital"
         >
           <img
-            src="/discret-logo-colored.png"
+            src={LOGO_COLORED}
             alt="Discret Digital"
             className="h-8 w-auto object-contain"
           />
@@ -87,7 +89,7 @@ export default function LoginPage() {
           <div className="text-center mb-8">
             <div className="flex justify-center mb-5">
               <img
-                src="/discret-logo-colored.png"
+                src={LOGO_COLORED}
                 alt="Discret AI Agentic Platform"
                 className="h-12 w-auto object-contain"
               />
@@ -203,7 +205,7 @@ export default function LoginPage() {
             className="hover:text-gray-400 transition-colors"
           >
             <img
-              src="/discret-logo.png"
+              src={LOGO_PLAIN}
               alt="Discret Digital"
               className="h-6 w-auto object-contain opacity-50 hover:opacity-80 transition-opacity"
             />
