@@ -6,13 +6,15 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { UserContext, type SessionUser } from '@/lib/user-context'
+import { BrandingContext, DEFAULT_BRANDING, type BrandingConfig } from '@/lib/branding-context'
 import Sidebar from '@/components/layout/Sidebar'
 import { Loader2 } from 'lucide-react'
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
-  const [user, setUser]   = useState<SessionUser | null>(null)
-  const [ready, setReady] = useState(false)
+  const [user,     setUser]     = useState<SessionUser | null>(null)
+  const [ready,    setReady]    = useState(false)
+  const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING)
 
   useEffect(() => {
     getSession().then((session) => {
@@ -22,7 +24,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     })
   }, [router])
 
-  // Periodic re-check every 2 min
+  // Fetch branding config once session is ready
+  useEffect(() => {
+    if (!ready) return
+    fetch('/api/branding')
+      .then((r) => r.json())
+      .then(({ branding: b }) => {
+        if (!b) return
+        const config: BrandingConfig = {
+          id:           b.id,
+          orgName:      b.org_name      || DEFAULT_BRANDING.orgName,
+          slug:         b.slug          || DEFAULT_BRANDING.slug,
+          agentName:    b.agent_name    || DEFAULT_BRANDING.agentName,
+          logoUrl:      b.logo_url      ?? null,
+          primaryColor: b.primary_color || DEFAULT_BRANDING.primaryColor,
+        }
+        setBranding(config)
+        // Apply primary colour as CSS variable
+        document.documentElement.style.setProperty('--primary', config.primaryColor)
+      })
+      .catch(() => {})
+  }, [ready])
+
+  // Periodic session re-check every 2 min
   useEffect(() => {
     if (!ready) return
     const interval = setInterval(() => {
@@ -41,12 +65,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <UserContext.Provider value={user}>
-      <div className="flex h-screen bg-dark-900 overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {children}
-        </main>
-      </div>
+      <BrandingContext.Provider value={branding}>
+        <div className="flex h-screen bg-dark-900 overflow-hidden">
+          <Sidebar />
+          <main className="flex-1 flex flex-col overflow-hidden">
+            {children}
+          </main>
+        </div>
+      </BrandingContext.Provider>
     </UserContext.Provider>
   )
 }

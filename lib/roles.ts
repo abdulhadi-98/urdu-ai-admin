@@ -20,6 +20,7 @@ export const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
     '/settings',
     '/api',
   ],
+  // Note: /branding is super_admin only — canAccess returns true for super_admin unconditionally
   member: [
     '/conversations',
     '/web-leads',
