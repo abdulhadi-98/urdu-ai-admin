@@ -123,8 +123,13 @@ export default function ConversationsPage() {
   const [linkSuccess, setLinkSuccess]   = useState(false)
 
   // Human takeover
-  const [pausedPhones, setPausedPhones] = useState<Set<string>>(new Set())
+  const [pausedPhones, setPausedPhones]     = useState<Set<string>>(new Set())
   const [takeoverLoading, setTakeoverLoading] = useState(false)
+  const [takeoverExpiries, setTakeoverExpiries] = useState<Map<string, number>>(new Map())
+  const [countdown, setCountdown]           = useState('')
+  const takeoverTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  const TAKEOVER_INACTIVITY_MS = 5 * 60 * 1000 // 5 minutes
 
   const chatEndRef       = useRef<HTMLDivElement>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -170,6 +175,29 @@ export default function ConversationsPage() {
     } catch {}
   }, [])
 
+  // ── Inactivity auto-resume timer ──────────────────────────────────────────
+  const startInactivityTimer = useCallback((phone: string) => {
+    // Clear any existing timer for this phone
+    const existing = takeoverTimersRef.current.get(phone)
+    if (existing) clearTimeout(existing)
+
+    const expiry = Date.now() + TAKEOVER_INACTIVITY_MS
+    setTakeoverExpiries((prev) => new Map(prev).set(phone, expiry))
+
+    const timer = setTimeout(async () => {
+      // Auto-resume AI — capture phone in closure, not from state
+      try {
+        await fetch(`${API_URL}/api/admin/conversations/${encodeURIComponent(phone)}/pause`, { method: 'DELETE' })
+      } catch {}
+      setPausedPhones((prev) => { const n = new Set(prev); n.delete(phone); return n })
+      setTakeoverExpiries((prev) => { const n = new Map(prev); n.delete(phone); return n })
+      takeoverTimersRef.current.delete(phone)
+    }, TAKEOVER_INACTIVITY_MS)
+
+    takeoverTimersRef.current.set(phone, timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── Human takeover handlers ─────────────────────────────────────────────────
   const handleTakeover = async () => {
     if (!selectedPhone) return
@@ -179,7 +207,10 @@ export default function ConversationsPage() {
         `${API_URL}/api/admin/conversations/${encodeURIComponent(selectedPhone)}/pause`,
         { method: 'POST' }
       )
-      if (res.ok) setPausedPhones((prev) => new Set(Array.from(prev).concat(selectedPhone)))
+      if (res.ok) {
+        setPausedPhones((prev) => new Set(Array.from(prev).concat(selectedPhone)))
+        startInactivityTimer(selectedPhone)
+      }
     } catch {
       setSendError('Failed to activate takeover.')
     } finally {
@@ -196,6 +227,11 @@ export default function ConversationsPage() {
         { method: 'DELETE' }
       )
       if (res.ok) {
+        // Clear inactivity timer
+        const t = takeoverTimersRef.current.get(selectedPhone)
+        if (t) clearTimeout(t)
+        takeoverTimersRef.current.delete(selectedPhone)
+        setTakeoverExpiries((prev) => { const n = new Map(prev); n.delete(selectedPhone); return n })
         setPausedPhones((prev) => {
           const next = new Set(prev)
           next.delete(selectedPhone)
@@ -303,6 +339,23 @@ export default function ConversationsPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [thread])
 
+  // ── Countdown ticker for takeover inactivity ────────────────────────────────
+  useEffect(() => {
+    if (!selectedPhone) { setCountdown(''); return }
+    const expiry = takeoverExpiries.get(selectedPhone)
+    if (!expiry) { setCountdown(''); return }
+    const update = () => {
+      const ms = expiry - Date.now()
+      if (ms <= 0) { setCountdown(''); return }
+      const mins = Math.floor(ms / 60000)
+      const secs = Math.floor((ms % 60000) / 1000)
+      setCountdown(`${mins}:${secs.toString().padStart(2, '0')}`)
+    }
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [selectedPhone, takeoverExpiries])
+
   // ── Filter contacts ─────────────────────────────────────────────────────────
   const filteredContacts = contacts.filter((c) => {
     const matchesSource =
@@ -337,6 +390,8 @@ export default function ConversationsPage() {
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setReplyText('')
+      // Reset inactivity timer on each admin message sent
+      if (selectedPhone && pausedPhones.has(selectedPhone)) startInactivityTimer(selectedPhone)
       setTimeout(fetchConversations, 800)
     } catch {
       setSendError('Failed to send message. Check API connection.')
@@ -386,6 +441,8 @@ export default function ConversationsPage() {
       fd.append('phone', selectedPhone)
       const res = await fetch(`${API_URL}/api/admin/send-voice`, { method: 'POST', body: fd })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      // Reset inactivity timer on each admin voice note sent
+      if (selectedPhone && pausedPhones.has(selectedPhone)) startInactivityTimer(selectedPhone)
       setTimeout(fetchConversations, 1_000)
     } catch {
       setSendError('Failed to send voice note.')
@@ -432,7 +489,7 @@ export default function ConversationsPage() {
 
   const selectedContact = contacts.find((c) => c.phone === selectedPhone)
   const selectedIsWeb   = selectedContact?.source === 'website'
-  const isAIPaused      = !selectedIsWeb && selectedPhone ? pausedPhones.has(selectedPhone) : false
+  const isAIPaused      = selectedPhone ? pausedPhones.has(selectedPhone) : false
   const grouped         = groupByDate(thread)
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -622,11 +679,12 @@ export default function ConversationsPage() {
                       </span>
                     )}
 
-                    {/* Human takeover status badge — WhatsApp only */}
-                    {!selectedIsWeb && isAIPaused && (
+                    {/* Human takeover status badge */}
+                    {isAIPaused && (
                       <span className="flex items-center gap-1 text-[10px] text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-full px-2 py-0.5">
                         <UserCheck className="w-3 h-3" />
                         Human handling
+                        {countdown && <span className="ml-1 font-mono">{countdown}</span>}
                       </span>
                     )}
                   </div>
@@ -674,29 +732,27 @@ export default function ConversationsPage() {
                   </button>
                 )}
 
-                {/* Human takeover button — WhatsApp only */}
-                {!selectedIsWeb && (
-                  isAIPaused ? (
-                    <button
-                      onClick={handleResumeAI}
-                      disabled={takeoverLoading}
-                      title="Resume AI — hand the conversation back to the bot"
-                      className="flex items-center gap-1.5 text-xs text-green-400 hover:text-green-300 border border-green-500/30 hover:border-green-500/60 bg-green-500/10 rounded-lg px-3 py-1.5 transition-colors shrink-0 disabled:opacity-50"
-                    >
-                      {takeoverLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
-                      Resume AI
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleTakeover}
-                      disabled={takeoverLoading}
-                      title="Take Over — pause AI and handle this conversation manually"
-                      className="flex items-center gap-1.5 text-xs text-yellow-400 hover:text-yellow-300 border border-yellow-500/30 hover:border-yellow-500/60 bg-yellow-500/10 rounded-lg px-3 py-1.5 transition-colors shrink-0 disabled:opacity-50"
-                    >
-                      {takeoverLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserCheck className="w-3.5 h-3.5" />}
-                      Take Over
-                    </button>
-                  )
+                {/* Human takeover button — all conversations */}
+                {isAIPaused ? (
+                  <button
+                    onClick={handleResumeAI}
+                    disabled={takeoverLoading}
+                    title="Resume AI — hand the conversation back to the bot"
+                    className="flex items-center gap-1.5 text-xs text-green-400 hover:text-green-300 border border-green-500/30 hover:border-green-500/60 bg-green-500/10 rounded-lg px-3 py-1.5 transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {takeoverLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
+                    Resume AI
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleTakeover}
+                    disabled={takeoverLoading}
+                    title="Take Over — pause AI and handle this conversation manually"
+                    className="flex items-center gap-1.5 text-xs text-yellow-400 hover:text-yellow-300 border border-yellow-500/30 hover:border-yellow-500/60 bg-yellow-500/10 rounded-lg px-3 py-1.5 transition-colors shrink-0 disabled:opacity-50"
+                  >
+                    {takeoverLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <HandMetal className="w-3.5 h-3.5" />}
+                    Take Over
+                  </button>
                 )}
               </div>
 
@@ -834,43 +890,59 @@ export default function ConversationsPage() {
                   </button>
                 </div>
               )}
-              {isAIPaused && (
+
+              {/* Takeover status banners */}
+              {isAIPaused ? (
                 <div className="flex items-center gap-1.5 mb-2 text-xs text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2">
                   <UserCheck className="w-3.5 h-3.5 shrink-0" />
-                  <span>You are in control — AI is paused. Type below to reply as a human agent. Click <strong>Resume AI</strong> when done.</span>
+                  <span className="flex-1">
+                    You are in control — AI is paused. Click <strong>Resume AI</strong> when done.
+                  </span>
+                  {countdown && (
+                    <span className="shrink-0 font-mono text-orange-300 text-[11px]">
+                      AI resumes in {countdown}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 mb-2 text-xs text-gray-500 bg-dark-700/60 border border-dark-600 rounded-lg px-3 py-2">
+                  <Bot className="w-3.5 h-3.5 shrink-0 text-gray-600" />
+                  <span>AI is handling this conversation. Press <strong className="text-gray-400">Take Over</strong> to reply manually.</span>
                 </div>
               )}
-              {selectedIsWeb && (
-                <div className="flex items-center gap-1.5 mb-2 text-xs text-blue-400/70">
-                  <Globe className="w-3 h-3" />
-                  <span>Website widget conversation — reply via the agent API</span>
-                </div>
-              )}
+
               <div className="flex items-end gap-2">
                 <textarea
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Type a message… (Enter to send)"
+                  placeholder={isAIPaused ? 'Type a message… (Enter to send)' : 'Take over to type…'}
+                  disabled={!isAIPaused}
                   rows={1}
-                  className="flex-1 bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:border-indigo-500 max-h-32"
+                  className={`flex-1 border rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none max-h-32 transition-colors ${
+                    isAIPaused
+                      ? 'bg-dark-700 border-dark-600 text-white placeholder-gray-600 focus:border-indigo-500'
+                      : 'bg-dark-800 border-dark-700 text-gray-700 placeholder-gray-700 cursor-not-allowed'
+                  }`}
                   style={{ minHeight: '42px' }}
                 />
                 <button
                   onClick={recording ? stopRecording : startRecording}
-                  disabled={sending}
+                  disabled={sending || !isAIPaused}
                   className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
                     recording
                       ? 'bg-red-500 hover:bg-red-600 animate-pulse'
-                      : 'bg-dark-700 hover:bg-dark-600 border border-dark-500'
+                      : isAIPaused
+                        ? 'bg-dark-700 hover:bg-dark-600 border border-dark-500'
+                        : 'bg-dark-800 border border-dark-700 cursor-not-allowed opacity-40'
                   }`}
-                  title={recording ? 'Stop recording' : 'Record voice note'}
+                  title={!isAIPaused ? 'Take over to record' : recording ? 'Stop recording' : 'Record voice note'}
                 >
                   {recording ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-gray-400" />}
                 </button>
                 <button
                   onClick={sendTextMessage}
-                  disabled={sending || !replyText.trim()}
+                  disabled={sending || !replyText.trim() || !isAIPaused}
                   className="w-10 h-10 rounded-xl bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors shrink-0"
                 >
                   {sending ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Send className="w-4 h-4 text-white" />}
