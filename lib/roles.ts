@@ -27,9 +27,12 @@ export const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
     '/api/auth',                              // session checks
     '/api/branding',                          // sidebar branding (layout)
     '/api/conversations',                     // stream endpoint
+    '/api/sb',                                // Supabase proxy — needed for data fetching
     '/api/backend/api/admin/conversations',
     '/api/backend/api/admin/web-leads',
     '/api/backend/api/admin/notifications',   // web-leads page actions
+    '/api/backend/api/admin/send',            // reply to WhatsApp from conversations
+    '/api/backend/api/admin/send-voice',      // voice reply
   ],
 }
 
