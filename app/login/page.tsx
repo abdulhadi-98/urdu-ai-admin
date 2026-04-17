@@ -62,7 +62,7 @@ export default function LoginPage() {
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/discret-logo-colored.png"
+            src="/discret-ai-logo.svg"
             alt="Discret Digital"
             className="h-8 w-auto object-contain"
           />
@@ -89,7 +89,7 @@ export default function LoginPage() {
             <div className="flex justify-center mb-5">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/discret-logo-colored.png"
+                src="/discret-ai-logo.svg"
                 alt="Discret AI Agentic Platform"
                 className="h-12 w-auto object-contain"
               />
@@ -206,7 +206,7 @@ export default function LoginPage() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/discret-logo.png"
+              src="/discret-logo.svg"
               alt="Discret Digital"
               className="h-6 w-auto object-contain opacity-50 hover:opacity-80 transition-opacity"
             />
