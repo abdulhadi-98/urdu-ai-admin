@@ -4,8 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { login, isAuthenticated } from '@/lib/auth'
 import { Eye, EyeOff, Lock, Mail, AlertCircle, Loader2, ExternalLink } from 'lucide-react'
-import Image from 'next/image'
-
 const WEBSITE_URL = 'https://www.discretdigital.com'
 
 export default function LoginPage() {
@@ -62,13 +60,11 @@ export default function LoginPage() {
           className="flex items-center gap-2 opacity-90 hover:opacity-100 transition-opacity"
           title="Visit Discret Digital"
         >
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src="/discret-logo-colored.png"
             alt="Discret Digital"
-            width={120}
-            height={36}
             className="h-8 w-auto object-contain"
-            priority
           />
         </a>
 
@@ -91,13 +87,11 @@ export default function LoginPage() {
           {/* Logo + Heading */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-5">
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src="/discret-logo-colored.png"
                 alt="Discret AI Agentic Platform"
-                width={180}
-                height={54}
                 className="h-12 w-auto object-contain"
-                priority
               />
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight">
@@ -210,11 +204,10 @@ export default function LoginPage() {
             rel="noopener noreferrer"
             className="hover:text-gray-400 transition-colors"
           >
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src="/discret-logo.png"
               alt="Discret Digital"
-              width={90}
-              height={28}
               className="h-6 w-auto object-contain opacity-50 hover:opacity-80 transition-opacity"
             />
           </a>
