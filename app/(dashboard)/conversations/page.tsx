@@ -811,8 +811,8 @@ export default function ConversationsPage() {
                     {messages.map((msg) => (
                       <div key={msg.id} className="space-y-2">
 
-                        {/* User message — left */}
-                        {(msg.user_message || msg.is_voice) && !msg.is_admin && (
+                        {/* ── User / visitor message — left ── */}
+                        {(msg.user_message || (msg.is_voice && !msg.is_admin)) && !msg.is_admin && (
                           <div className="flex items-end gap-2 justify-start">
                             {isWebSource(msg) ? (
                               <div className="w-7 h-7 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center shrink-0">
@@ -827,9 +827,9 @@ export default function ConversationsPage() {
                             )}
                             <div className="max-w-[65%]">
                               {msg.is_voice && msg.voice_note_url ? (
-                                <AudioPlayer src={msg.voice_note_url} text={msg.user_message ?? undefined} transcription={msg.user_message} className="min-w-[250px]" />
+                                <AudioPlayer src={msg.voice_note_url} text={msg.user_message ?? undefined} transcription={msg.user_message ?? undefined} className="min-w-[250px]" />
                               ) : msg.is_voice ? (
-                                <AudioPlayer text={msg.user_message ?? 'Voice message'} transcription={msg.user_message} className="min-w-[250px]" />
+                                <AudioPlayer text={msg.user_message ?? 'Voice message'} transcription={msg.user_message ?? undefined} className="min-w-[250px]" />
                               ) : (
                                 <div className="bg-dark-700 border border-dark-500 rounded-2xl rounded-bl-sm px-4 py-2.5">
                                   <p className="text-sm text-white leading-relaxed" dir="auto">{msg.user_message}</p>
@@ -847,12 +847,34 @@ export default function ConversationsPage() {
                           </div>
                         )}
 
-                        {/* AI response — right */}
-                        {msg.ai_response && (
+                        {/* ── Admin / human agent message — right (indigo) ── */}
+                        {msg.is_admin && (msg.ai_response || msg.ai_voice_note_url) && (
                           <div className="flex items-end gap-2 justify-end">
                             <div className="max-w-[65%]">
                               {msg.ai_voice_note_url ? (
-                                <AudioPlayer src={msg.ai_voice_note_url} text={msg.ai_response} transcription={msg.ai_response} className="min-w-[250px]" />
+                                <AudioPlayer src={msg.ai_voice_note_url} text={msg.ai_response ?? 'Voice note'} transcription={msg.ai_response ?? undefined} className="min-w-[250px]" />
+                              ) : (
+                                <div className="bg-indigo-500/15 border border-indigo-500/30 rounded-2xl rounded-br-sm px-4 py-2.5">
+                                  <p className="text-sm text-indigo-100 leading-relaxed" dir="auto">{msg.ai_response}</p>
+                                </div>
+                              )}
+                              <div className="flex items-center justify-end gap-1.5 mt-1 mr-1">
+                                <span className="text-xs text-indigo-500/70">Human Agent</span>
+                                <p className="text-xs text-gray-600">{format(parseISO(msg.created_at), 'h:mm a')}</p>
+                              </div>
+                            </div>
+                            <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                              <UserCheck className="w-3.5 h-3.5 text-indigo-400" />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── AI response — right (green) ── */}
+                        {!msg.is_admin && (msg.ai_response || msg.ai_voice_note_url) && (
+                          <div className="flex items-end gap-2 justify-end">
+                            <div className="max-w-[65%]">
+                              {msg.ai_voice_note_url ? (
+                                <AudioPlayer src={msg.ai_voice_note_url} text={msg.ai_response ?? 'Voice response'} transcription={msg.ai_response ?? undefined} className="min-w-[250px]" />
                               ) : (
                                 <div className="bg-[#1a2a1a] border border-green-800/40 rounded-2xl rounded-br-sm px-4 py-2.5">
                                   <p className="text-sm text-green-100 leading-relaxed" dir="auto">{msg.ai_response}</p>
