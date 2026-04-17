@@ -60,9 +60,8 @@ export default function LoginPage() {
           className="flex items-center gap-2 opacity-90 hover:opacity-100 transition-opacity"
           title="Visit Discret Digital"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/discret-ai-logo.svg"
+            src="/discret-logo-colored.png"
             alt="Discret Digital"
             className="h-8 w-auto object-contain"
           />
@@ -87,9 +86,8 @@ export default function LoginPage() {
           {/* Logo + Heading */}
           <div className="text-center mb-8">
             <div className="flex justify-center mb-5">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/discret-ai-logo.svg"
+                src="/discret-logo-colored.png"
                 alt="Discret AI Agentic Platform"
                 className="h-12 w-auto object-contain"
               />
@@ -204,9 +202,8 @@ export default function LoginPage() {
             rel="noopener noreferrer"
             className="hover:text-gray-400 transition-colors"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/discret-logo.svg"
+              src="/discret-logo.png"
               alt="Discret Digital"
               className="h-6 w-auto object-contain opacity-50 hover:opacity-80 transition-opacity"
             />
