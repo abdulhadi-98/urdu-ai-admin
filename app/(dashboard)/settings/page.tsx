@@ -4,13 +4,15 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Bot, Globe, Shield, CheckCircle, Eye, EyeOff, Lock, Loader2,
-  AlertCircle, RefreshCw, Database, Wifi, MessageSquare, Brain,
-  BookOpen, Server, Users, UserPlus, Trash2, ShieldCheck, ShieldOff,
-  KeyRound,
+  Bot, Globe, Shield, Eye, EyeOff, Loader2, AlertCircle,
+  RefreshCw, Database, Wifi, MessageSquare, Brain, BookOpen,
+  Server, Users, UserPlus, KeyRound, ShieldCheck, ShieldOff, Trash2,
 } from 'lucide-react'
 import Header from '@/components/layout/Header'
 import { TENANT } from '@/lib/auth'
+import { useUser } from '@/lib/user-context'
+import { roleLabel, roleColor, type Role } from '@/lib/roles'
+import { cn } from '@/lib/utils'
 
 const BACKEND = '/api/backend'
 
@@ -20,10 +22,18 @@ type ServiceStatus = 'online' | 'offline' | 'disabled' | 'loading'
 interface ServiceItem { name: string; label: string; status: ServiceStatus; detail?: string }
 
 interface AdminUser {
-  id: string; email: string; name: string; role: string
+  id: string; email: string; name: string; role: Role
   is_active: boolean; failed_attempts: number; locked_until: string | null
   last_login_at: string | null; created_at: string
 }
+
+const ROLE_ACCESS: Record<Role, string> = {
+  super_admin: 'Full access — all dashboard pages',
+  admin:       'All pages except Prompts and Knowledge Base',
+  member:      'Conversations and Web Leads only',
+}
+
+const ROLE_LIMITS: Record<string, number> = { admin: 2, member: 3 }
 
 // ── Service icons ─────────────────────────────────────────────────────────────
 
@@ -45,11 +55,9 @@ const PLACEHOLDER_SERVICES: ServiceItem[] = [
   { name: 'knowledge', label: 'Knowledge Base (RAG)', status: 'loading' },
 ]
 
-// ── Status components ─────────────────────────────────────────────────────────
-
 function StatusDot({ status }: { status: ServiceStatus }) {
-  if (status === 'loading') return <span className="w-2.5 h-2.5 rounded-full bg-gray-600 animate-pulse" />
-  if (status === 'online')  return (
+  if (status === 'loading')  return <span className="w-2.5 h-2.5 rounded-full bg-gray-600 animate-pulse" />
+  if (status === 'online')   return (
     <span className="relative flex w-2.5 h-2.5">
       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-60" />
       <span className="relative inline-flex rounded-full w-2.5 h-2.5 bg-green-400" />
@@ -69,39 +77,33 @@ function StatusBadge({ status }: { status: ServiceStatus }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const currentUser = useUser()
+  const canManage   = currentUser?.role === 'super_admin' || currentUser?.role === 'admin'
 
   // ── System status ──────────────────────────────────────────────────────────
-  const [services, setServices]       = useState<ServiceItem[]>(PLACEHOLDER_SERVICES)
+  const [services, setServices]           = useState<ServiceItem[]>(PLACEHOLDER_SERVICES)
   const [statusLoading, setStatusLoading] = useState(false)
-  const [statusTime, setStatusTime]   = useState<string | null>(null)
-  const [statusError, setStatusError] = useState<string | null>(null)
+  const [statusTime, setStatusTime]       = useState<string | null>(null)
+  const [statusError, setStatusError]     = useState<string | null>(null)
 
-  // ── Change password ────────────────────────────────────────────────────────
-  const [currentPw, setCurrentPw]     = useState('')
-  const [newPw, setNewPw]             = useState('')
-  const [confirmPw, setConfirmPw]     = useState('')
-  const [showCurrent, setShowCurrent] = useState(false)
-  const [showNew, setShowNew]         = useState(false)
-  const [pwSaving, setPwSaving]       = useState(false)
-  const [pwSaved, setPwSaved]         = useState(false)
-  const [pwError, setPwError]         = useState('')
-
-  // ── Admin users ────────────────────────────────────────────────────────────
-  const [adminUsers, setAdminUsers]   = useState<AdminUser[]>([])
+  // ── Users ──────────────────────────────────────────────────────────────────
+  const [users, setUsers]             = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(true)
-  const [showAddUser, setShowAddUser] = useState(false)
-  const [newEmail, setNewEmail]       = useState('')
-  const [newName, setNewName]         = useState('')
-  const [newUserPw, setNewUserPw]     = useState('')
-  const [newRole, setNewRole]         = useState<'admin' | 'super_admin'>('admin')
+  const [showAdd, setShowAdd]         = useState(false)
+  const [addRole, setAddRole]         = useState<Role>('member')
+  const [addEmail, setAddEmail]       = useState('')
+  const [addName, setAddName]         = useState('')
+  const [addPw, setAddPw]             = useState('')
+  const [showAddPw, setShowAddPw]     = useState(false)
   const [addError, setAddError]       = useState('')
   const [addSaving, setAddSaving]     = useState(false)
 
-  // ── Reset password for a user ──────────────────────────────────────────────
-  const [resetUserId, setResetUserId]   = useState<string | null>(null)
-  const [resetPw, setResetPw]           = useState('')
-  const [resetSaving, setResetSaving]   = useState(false)
-  const [resetError, setResetError]     = useState('')
+  // ── Reset password ─────────────────────────────────────────────────────────
+  const [resetId, setResetId]         = useState<string | null>(null)
+  const [resetPw, setResetPw]         = useState('')
+  const [showResetPw, setShowResetPw] = useState(false)
+  const [resetSaving, setResetSaving] = useState(false)
+  const [resetError, setResetError]   = useState('')
 
   const cfg: Record<string, string> =
     typeof window !== 'undefined' ? (window as any).__APP_CONFIG__ ?? {} : {}
@@ -112,7 +114,7 @@ export default function SettingsPage() {
   const fetchStatus = useCallback(async () => {
     setStatusLoading(true); setStatusError(null)
     try {
-      const res = await fetch(`${BACKEND}/api/admin/status`)
+      const res  = await fetch(`${BACKEND}/api/admin/status`)
       if (!res.ok) throw new Error(`Server returned ${res.status}`)
       const data = await res.json()
       setServices(data.services ?? PLACEHOLDER_SERVICES)
@@ -125,83 +127,42 @@ export default function SettingsPage() {
 
   useEffect(() => { fetchStatus() }, [fetchStatus])
 
-  // ── Fetch admin users ──────────────────────────────────────────────────────
+  // ── Fetch users ────────────────────────────────────────────────────────────
 
   const fetchUsers = useCallback(async () => {
     setUsersLoading(true)
     try {
-      const res = await fetch('/api/auth/register')
+      const res  = await fetch('/api/auth/register')
       if (!res.ok) throw new Error(`${res.status}`)
       const data = await res.json()
-      setAdminUsers(data.users ?? [])
-    } catch { /* ignore — may not have permission */ }
-    finally { setUsersLoading(false) }
+      setUsers(data.users ?? [])
+    } finally { setUsersLoading(false) }
   }, [])
 
   useEffect(() => { fetchUsers() }, [fetchUsers])
 
-  // ── Change own password ────────────────────────────────────────────────────
+  // ── Add user ───────────────────────────────────────────────────────────────
 
-  const handlePasswordChange = async (e: React.FormEvent) => {
-    e.preventDefault(); setPwError('')
-    if (!currentPw || !newPw || !confirmPw) { setPwError('All fields are required'); return }
-    if (newPw !== confirmPw)                { setPwError('Passwords do not match'); return }
-    if (newPw.length < 8)                  { setPwError('Password must be at least 8 characters'); return }
-
-    setPwSaving(true)
-    try {
-      // Verify current password via login endpoint
-      const verifyRes = await fetch('/api/auth/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: '', password: currentPw }),  // email ignored for own-pw check
-      })
-      // We need the logged-in user's email — get from /me
-      const meRes  = await fetch('/api/auth/me')
-      const me     = await meRes.json()
-      const verify = await fetch('/api/auth/login', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: me.email, password: currentPw }),
-      })
-      if (!verify.ok) { setPwError('Current password is incorrect'); return }
-
-      const saveRes = await fetch('/api/auth/register', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: me.id, password: newPw }),
-      })
-      if (!saveRes.ok) {
-        const err = await saveRes.json().catch(() => ({}))
-        throw new Error((err as any).error || `Server error ${saveRes.status}`)
-      }
-      setPwSaved(true); setCurrentPw(''); setNewPw(''); setConfirmPw('')
-      setTimeout(() => setPwSaved(false), 3000)
-    } catch (err: unknown) {
-      setPwError(err instanceof Error ? err.message : 'Failed to update password')
-    } finally { setPwSaving(false) }
-  }
-
-  // ── Add new admin user ─────────────────────────────────────────────────────
-
-  const handleAddUser = async (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault(); setAddError('')
-    if (!newEmail || !newName || !newUserPw) { setAddError('All fields are required'); return }
-
+    if (!addEmail || !addName || !addPw) { setAddError('All fields are required'); return }
     setAddSaving(true)
     try {
-      const res = await fetch('/api/auth/register', {
+      const res  = await fetch('/api/auth/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: newEmail, name: newName, password: newUserPw, role: newRole }),
+        body: JSON.stringify({ email: addEmail, name: addName, password: addPw, role: addRole }),
       })
       const data = await res.json()
       if (!res.ok) { setAddError(data.error || 'Failed to create user'); return }
-      setShowAddUser(false); setNewEmail(''); setNewName(''); setNewUserPw('')
+      setShowAdd(false); setAddEmail(''); setAddName(''); setAddPw('')
       fetchUsers()
     } catch { setAddError('Network error') }
     finally { setAddSaving(false) }
   }
 
-  // ── Toggle user active/inactive ───────────────────────────────────────────
+  // ── Toggle active ──────────────────────────────────────────────────────────
 
-  const toggleUserActive = async (user: AdminUser) => {
+  const toggleActive = async (user: AdminUser) => {
     await fetch('/api/auth/register', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: user.id, is_active: !user.is_active }),
@@ -209,24 +170,36 @@ export default function SettingsPage() {
     fetchUsers()
   }
 
-  // ── Reset another user's password ─────────────────────────────────────────
+  // ── Delete user ────────────────────────────────────────────────────────────
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  const deleteUser = async (id: string) => {
+    if (!confirm('Remove this user? They will lose dashboard access immediately.')) return
+    const res  = await fetch(`/api/auth/register?id=${id}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (!res.ok) { alert(data.error); return }
+    fetchUsers()
+  }
+
+  // ── Reset password ─────────────────────────────────────────────────────────
+
+  const handleReset = async (e: React.FormEvent) => {
     e.preventDefault(); setResetError('')
-    if (!resetPw || resetPw.length < 8) { setResetError('Password must be at least 8 characters'); return }
+    if (!resetPw || resetPw.length < 8) { setResetError('Min 8 characters'); return }
     setResetSaving(true)
     try {
-      const res = await fetch('/api/auth/register', {
+      const res  = await fetch('/api/auth/register', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: resetUserId, password: resetPw }),
+        body: JSON.stringify({ id: resetId, password: resetPw }),
       })
       if (!res.ok) { const d = await res.json(); setResetError(d.error); return }
-      setResetUserId(null); setResetPw('')
+      setResetId(null); setResetPw('')
     } catch { setResetError('Network error') }
     finally { setResetSaving(false) }
   }
 
-  const onlineCount  = services.filter(s => s.status === 'online').length
+  // ── Group users by role ────────────────────────────────────────────────────
+
+  const byRole = (role: Role) => users.filter(u => u.role === role)
   const offlineCount = services.filter(s => s.status === 'offline').length
   const allGreen     = offlineCount === 0 && services.every(s => s.status !== 'loading')
 
@@ -251,9 +224,8 @@ export default function SettingsPage() {
             <div className="flex items-center gap-3">
               {!statusLoading && !statusError && (
                 <span className={`text-xs font-medium rounded-full px-3 py-1 border ${
-                  allGreen
-                    ? 'bg-green-500/15 text-green-400 border-green-500/20'
-                    : 'bg-red-500/15 text-red-400 border-red-500/20'
+                  allGreen ? 'bg-green-500/15 text-green-400 border-green-500/20'
+                           : 'bg-red-500/15 text-red-400 border-red-500/20'
                 }`}>
                   {allGreen ? 'All systems operational' : `${offlineCount} service${offlineCount !== 1 ? 's' : ''} down`}
                 </span>
@@ -264,14 +236,12 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
-
           {statusError && (
             <div className="mx-5 mt-4 flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">
               <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
               <p className="text-sm text-red-400">{statusError}</p>
             </div>
           )}
-
           <div className="divide-y divide-dark-600">
             {services.map((svc) => (
               <div key={svc.name} className="px-5 py-3.5 flex items-center gap-4">
@@ -296,132 +266,173 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ── Admin Users ── */}
+        {/* ── Users ── */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-dark-600 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-indigo-400" /> Admin Users
+                <Users className="w-4 h-4 text-indigo-400" /> Users
               </h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                All admins authenticated via email + bcrypt password stored in database
+                1 Super Admin · max 2 Admins · max 3 Members
               </p>
             </div>
-            <button onClick={() => { setShowAddUser(!showAddUser); setAddError('') }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium rounded-lg transition-colors">
-              <UserPlus className="w-3.5 h-3.5" /> Add Admin
-            </button>
+            {canManage && (
+              <button onClick={() => { setShowAdd(!showAdd); setAddError('') }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium rounded-lg transition-colors">
+                <UserPlus className="w-3.5 h-3.5" /> Add User
+              </button>
+            )}
           </div>
 
           {/* Add user form */}
-          {showAddUser && (
-            <form onSubmit={handleAddUser} className="px-5 py-4 border-b border-dark-600 bg-dark-700/40 space-y-3">
-              <p className="text-xs font-medium text-gray-300">New Admin Account</p>
+          {showAdd && canManage && (
+            <form onSubmit={handleAdd} className="px-5 py-4 border-b border-dark-600 bg-dark-700/40 space-y-3">
+              <p className="text-xs font-medium text-gray-300">New User</p>
               <div className="grid grid-cols-2 gap-3">
-                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Full name"
+                <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Full name"
                   className="bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email address" type="email"
+                <input value={addEmail} onChange={e => setAddEmail(e.target.value)} placeholder="Email" type="email"
                   className="bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                <input value={newUserPw} onChange={e => setNewUserPw(e.target.value)} placeholder="Password (min 8 chars)" type="password"
-                  className="bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                <select value={newRole} onChange={e => setNewRole(e.target.value as 'admin' | 'super_admin')}
+                <div className="relative">
+                  <input value={addPw} onChange={e => setAddPw(e.target.value)}
+                    placeholder="Password (min 8 chars)" type={showAddPw ? 'text' : 'password'}
+                    className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-3 pr-9 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+                  <button type="button" onClick={() => setShowAddPw(!showAddPw)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                    {showAddPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <select value={addRole} onChange={e => setAddRole(e.target.value as Role)}
                   className="bg-dark-700 border border-dark-600 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                  {currentUser?.role === 'super_admin' && <option value="super_admin">Super Admin</option>}
                   <option value="admin">Admin</option>
-                  <option value="super_admin">Super Admin</option>
+                  <option value="member">Member</option>
                 </select>
               </div>
+              {/* Access preview */}
+              <p className="text-xs text-gray-500 italic">{ROLE_ACCESS[addRole]}</p>
               {addError && <p className="text-xs text-red-400">{addError}</p>}
               <div className="flex gap-2">
                 <button type="submit" disabled={addSaving}
                   className="flex items-center gap-1.5 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 text-white text-xs font-medium rounded-lg transition-colors">
-                  {addSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Creating…</> : 'Create Admin'}
+                  {addSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Creating…</> : 'Create User'}
                 </button>
-                <button type="button" onClick={() => setShowAddUser(false)}
-                  className="px-4 py-2 bg-dark-700 border border-dark-600 hover:border-gray-500 text-gray-400 text-xs rounded-lg transition-colors">
+                <button type="button" onClick={() => setShowAdd(false)}
+                  className="px-4 py-2 bg-dark-700 border border-dark-600 hover:border-gray-500 text-gray-400 text-xs rounded-lg">
                   Cancel
                 </button>
               </div>
             </form>
           )}
 
-          {/* Users list */}
           {usersLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
             </div>
-          ) : adminUsers.length === 0 ? (
-            <div className="px-5 py-6 text-center text-sm text-gray-500">
-              No admin users found. Run the setup script to create the first admin.
-            </div>
           ) : (
-            <div className="divide-y divide-dark-600">
-              {adminUsers.map((user) => (
-                <div key={user.id}>
-                  <div className="px-5 py-3.5 flex items-center gap-4">
-                    <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0">
-                      <span className="text-indigo-400 text-sm font-semibold">
-                        {user.name.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
+            <div>
+              {(['super_admin', 'admin', 'member'] as Role[]).map((role) => {
+                const roleUsers = byRole(role)
+                const limit     = ROLE_LIMITS[role]
+                return (
+                  <div key={role}>
+                    {/* Role header */}
+                    <div className="px-5 py-2.5 bg-dark-700/30 border-b border-dark-600 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-white truncate">{user.name}</p>
-                        <span className={`text-xs rounded-full px-2 py-0.5 border ${
-                          user.role === 'super_admin'
-                            ? 'bg-purple-500/15 text-purple-400 border-purple-500/20'
-                            : 'bg-indigo-500/15 text-indigo-400 border-indigo-500/20'
-                        }`}>{user.role === 'super_admin' ? 'Super Admin' : 'Admin'}</span>
-                        {user.locked_until && new Date(user.locked_until) > new Date() && (
-                          <span className="text-xs bg-red-500/15 text-red-400 border border-red-500/20 rounded-full px-2 py-0.5">Locked</span>
-                        )}
+                        <span className={cn('text-xs font-medium rounded-full px-2.5 py-0.5 border', roleColor(role))}>
+                          {roleLabel(role)}
+                        </span>
+                        <span className="text-xs text-gray-500">{ROLE_ACCESS[role]}</span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5">{user.email}</p>
-                      {user.last_login_at && (
-                        <p className="text-xs text-gray-600 mt-0.5">
-                          Last login: {new Date(user.last_login_at).toLocaleDateString()}
-                        </p>
+                      {limit !== undefined && (
+                        <span className="text-xs text-gray-600">{roleUsers.length}/{limit}</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {/* Reset password */}
-                      <button onClick={() => { setResetUserId(user.id); setResetPw(''); setResetError('') }}
-                        title="Reset password"
-                        className="p-1.5 text-gray-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors">
-                        <KeyRound className="w-3.5 h-3.5" />
-                      </button>
-                      {/* Toggle active */}
-                      <button onClick={() => toggleUserActive(user)}
-                        title={user.is_active ? 'Deactivate' : 'Activate'}
-                        className={`p-1.5 rounded-lg transition-colors ${
-                          user.is_active
-                            ? 'text-green-400 hover:bg-red-500/10 hover:text-red-400'
-                            : 'text-red-400 hover:bg-green-500/10 hover:text-green-400'
-                        }`}>
-                        {user.is_active ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldOff className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* Inline reset password form */}
-                  {resetUserId === user.id && (
-                    <form onSubmit={handleResetPassword}
-                      className="px-5 py-3 bg-dark-700/40 border-t border-dark-600 flex items-center gap-3">
-                      <input value={resetPw} onChange={e => setResetPw(e.target.value)}
-                        type="password" placeholder="New password (min 8 chars)"
-                        className="flex-1 bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500" />
-                      <button type="submit" disabled={resetSaving}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 text-white text-xs font-medium rounded-lg transition-colors">
-                        {resetSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Set'}
-                      </button>
-                      <button type="button" onClick={() => setResetUserId(null)}
-                        className="px-3 py-2 bg-dark-700 border border-dark-600 text-gray-400 text-xs rounded-lg transition-colors hover:border-gray-500">
-                        Cancel
-                      </button>
-                      {resetError && <p className="text-xs text-red-400">{resetError}</p>}
-                    </form>
-                  )}
-                </div>
-              ))}
+                    {roleUsers.length === 0 ? (
+                      <div className="px-5 py-3 text-xs text-gray-600 italic border-b border-dark-600">
+                        No {roleLabel(role).toLowerCase()}s yet
+                      </div>
+                    ) : roleUsers.map((user) => (
+                      <div key={user.id}>
+                        <div className="px-5 py-3.5 flex items-center gap-3 border-b border-dark-600">
+                          <div className="w-8 h-8 rounded-full bg-indigo-500/15 flex items-center justify-center shrink-0">
+                            <span className="text-indigo-400 text-sm font-semibold">
+                              {user.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-medium text-white">{user.name}</p>
+                              {!user.is_active && (
+                                <span className="text-xs bg-red-500/15 text-red-400 border border-red-500/20 rounded-full px-2 py-0.5">Inactive</span>
+                              )}
+                              {user.locked_until && new Date(user.locked_until) > new Date() && (
+                                <span className="text-xs bg-orange-500/15 text-orange-400 border border-orange-500/20 rounded-full px-2 py-0.5">Locked</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">{user.email}</p>
+                            {user.last_login_at && (
+                              <p className="text-xs text-gray-600 mt-0.5">Last login: {new Date(user.last_login_at).toLocaleDateString()}</p>
+                            )}
+                          </div>
+                          {canManage && user.id !== currentUser?.id && (
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button onClick={() => { setResetId(user.id); setResetPw(''); setResetError('') }}
+                                title="Reset password"
+                                className="p-1.5 text-gray-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-colors">
+                                <KeyRound className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => toggleActive(user)}
+                                title={user.is_active ? 'Deactivate' : 'Activate'}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                  user.is_active
+                                    ? 'text-green-400 hover:bg-red-500/10 hover:text-red-400'
+                                    : 'text-red-400 hover:bg-green-500/10 hover:text-green-400'
+                                }`}>
+                                {user.is_active ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldOff className="w-3.5 h-3.5" />}
+                              </button>
+                              {user.role !== 'super_admin' && (
+                                <button onClick={() => deleteUser(user.id)}
+                                  title="Remove user"
+                                  className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Inline reset password */}
+                        {resetId === user.id && (
+                          <form onSubmit={handleReset}
+                            className="px-5 py-3 bg-dark-700/40 border-b border-dark-600 flex items-center gap-3">
+                            <div className="relative flex-1">
+                              <input value={resetPw} onChange={e => setResetPw(e.target.value)}
+                                type={showResetPw ? 'text' : 'password'} placeholder="New password (min 8)"
+                                className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-3 pr-9 py-2 text-sm focus:outline-none focus:border-indigo-500" />
+                              <button type="button" onClick={() => setShowResetPw(!showResetPw)}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                                {showResetPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+                            <button type="submit" disabled={resetSaving}
+                              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 text-white text-xs font-medium rounded-lg">
+                              {resetSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Set'}
+                            </button>
+                            <button type="button" onClick={() => setResetId(null)}
+                              className="px-3 py-2 bg-dark-700 border border-dark-600 text-gray-400 text-xs rounded-lg hover:border-gray-500">
+                              Cancel
+                            </button>
+                            {resetError && <p className="text-xs text-red-400">{resetError}</p>}
+                          </form>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
@@ -455,65 +466,6 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ── Change Own Password ── */}
-        <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-dark-600">
-            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-              <Lock className="w-4 h-4 text-indigo-400" /> Change My Password
-            </h3>
-            <p className="text-xs text-gray-500 mt-0.5">Hashed with bcrypt and stored in the database.</p>
-          </div>
-          <form onSubmit={handlePasswordChange} className="p-5 space-y-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5">Current Password</label>
-              <div className="relative">
-                <input type={showCurrent ? 'text' : 'password'} value={currentPw}
-                  onChange={e => setCurrentPw(e.target.value)} placeholder="Enter current password"
-                  className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500" />
-                <button type="button" onClick={() => setShowCurrent(!showCurrent)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-                  {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5">New Password</label>
-              <div className="relative">
-                <input type={showNew ? 'text' : 'password'} value={newPw}
-                  onChange={e => setNewPw(e.target.value)} placeholder="Min. 8 characters"
-                  className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-indigo-500" />
-                <button type="button" onClick={() => setShowNew(!showNew)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
-                  {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1.5">Confirm New Password</label>
-              <input type="password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)}
-                placeholder="Repeat new password"
-                className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500" />
-            </div>
-            {pwError && (
-              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2.5">
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                <p className="text-sm text-red-400">{pwError}</p>
-              </div>
-            )}
-            <div className="flex items-center justify-between pt-1">
-              {pwSaved && (
-                <span className="flex items-center gap-1.5 text-green-400 text-sm">
-                  <CheckCircle className="w-4 h-4" /> Password updated
-                </span>
-              )}
-              <button type="submit" disabled={pwSaving}
-                className="ml-auto flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors">
-                {pwSaving ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…</> : 'Update Password'}
-              </button>
-            </div>
-          </form>
-        </div>
-
         {/* ── Auth Info ── */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-dark-600">
@@ -523,11 +475,12 @@ export default function SettingsPage() {
           </div>
           <div className="p-5 space-y-3">
             {[
-              ['Session storage', 'httpOnly JWT cookie — not readable by JavaScript'],
-              ['Password storage', 'bcrypt hashed (12 rounds) — never stored in plaintext'],
-              ['Session duration', '8 hours — auto-expires, re-check every 2 minutes'],
-              ['Brute force', 'Account locked for 15 min after 5 failed attempts'],
-              ['Route protection', 'Server-side middleware validates every request'],
+              ['Session storage',   'httpOnly JWT cookie — not readable by JavaScript'],
+              ['Password storage',  'bcrypt hashed (12 rounds) — never stored in plaintext'],
+              ['Session duration',  '8 hours — verified every 2 minutes'],
+              ['Brute force',       'Account locked for 15 min after 5 failed attempts'],
+              ['Route protection',  'Server-side middleware validates every request'],
+              ['Role enforcement',  'Server-side — cannot be bypassed client-side'],
             ].map(([label, value]) => (
               <div key={label} className="flex items-start justify-between gap-4">
                 <p className="text-xs text-gray-500 shrink-0 w-36">{label}</p>

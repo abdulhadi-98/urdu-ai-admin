@@ -1,28 +1,30 @@
 /**
- * Next.js Edge Middleware — server-side route protection.
+ * Next.js Edge Middleware — authentication + role-based route protection.
  *
- * Runs before every request. Protected paths require a valid
- * admin_token cookie (JWT signed with ADMIN_JWT_SECRET).
- *
- * Unprotected paths: /login, /api/auth/login, static assets.
+ * super_admin → full access
+ * admin       → all routes except /prompts and /knowledge-base
+ * member      → only /conversations and /web-leads
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
+import { canAccess, type Role } from '@/lib/roles'
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.ADMIN_JWT_SECRET || 'change-this-secret-in-production'
 )
 
-const PUBLIC_PATHS = [
-  '/login',
-  '/api/auth/login',
-  '/api/auth/logout',
-  '/_next',
-  '/favicon.ico',
-]
+const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/logout', '/_next', '/favicon.ico']
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname.startsWith(p))
+}
+
+function forbidden(req: NextRequest, message: string) {
+  if (req.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.json({ error: message }, { status: 403 })
+  }
+  // Redirect to the first allowed page based on role (handled client-side via sidebar)
+  return NextResponse.redirect(new URL('/conversations', req.url))
 }
 
 export async function middleware(req: NextRequest) {
@@ -40,16 +42,21 @@ export async function middleware(req: NextRequest) {
 
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET)
+    const role = (payload.role ?? 'member') as Role
 
-    // Forward user info to downstream route handlers via headers
+    // ── Role-based access check ──────────────────────────────────────────────
+    if (!canAccess(role, pathname)) {
+      return forbidden(req, `Access denied — your role (${role}) cannot access this page`)
+    }
+
+    // Forward user info to downstream route handlers
     const res = NextResponse.next()
-    res.headers.set('x-admin-id',    String(payload.sub ?? ''))
+    res.headers.set('x-admin-id',    String(payload.sub   ?? ''))
     res.headers.set('x-admin-email', String(payload.email ?? ''))
     res.headers.set('x-admin-name',  String(payload.name  ?? ''))
-    res.headers.set('x-admin-role',  String(payload.role  ?? 'admin'))
+    res.headers.set('x-admin-role',  String(role))
     return res
   } catch {
-    // Token invalid or expired — clear cookie and redirect
     if (pathname.startsWith('/api/')) {
       const res = NextResponse.json({ error: 'Session expired' }, { status: 401 })
       res.cookies.delete('admin_token')
@@ -62,11 +69,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all paths except static files.
-     * This runs on: /, /dashboard/*, /api/*, etc.
-     */
-    '/((?!_next/static|_next/image|favicon\\.ico).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico).*)'],
 }

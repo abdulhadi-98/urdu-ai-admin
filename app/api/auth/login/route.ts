@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
     .single()
 
   const hashToCheck = user?.password_hash ?? DUMMY_HASH
+
+  // bcryptjs supports both $2a$ (pgcrypto) and $2b$ (bcryptjs native) hashes
   const match = await bcrypt.compare(password, hashToCheck)
 
   // Check lockout before revealing anything

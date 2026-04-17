@@ -1,13 +1,18 @@
 /**
- * Admin user management — requires authentication (middleware enforces this).
+ * User management API — requires authentication (middleware enforces this).
  *
- * GET  /api/auth/register — list all admin users
- * POST /api/auth/register — create a new admin user
- * PUT  /api/auth/register — update user (name, role, is_active, password)
+ * GET  /api/auth/register        — list all users
+ * POST /api/auth/register        — create user (enforces role limits)
+ * PUT  /api/auth/register        — update user (name, role, is_active, password)
+ * DELETE /api/auth/register?id=  — remove user
+ *
+ * Limits: max 2 admins, max 3 members (super_admin unlimited)
+ * Only super_admin and admin can manage users.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
+import { ROLE_LIMITS, type Role } from '@/lib/roles'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,7 +26,11 @@ function db() {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
-// ── GET — list users ──────────────────────────────────────────────────────────
+function callerRole(req: NextRequest): Role {
+  return (req.headers.get('x-admin-role') ?? 'member') as Role
+}
+
+// ── GET — list all users ──────────────────────────────────────────────────────
 
 export async function GET() {
   const supabase = db()
@@ -29,7 +38,6 @@ export async function GET() {
     .from('admin_users')
     .select('id, email, name, role, is_active, failed_attempts, locked_until, last_login_at, created_at')
     .order('created_at', { ascending: true })
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ users: data ?? [] })
 }
@@ -37,6 +45,11 @@ export async function GET() {
 // ── POST — create user ────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const caller = callerRole(req)
+  if (caller === 'member') {
+    return NextResponse.json({ error: 'Members cannot manage users' }, { status: 403 })
+  }
+
   let body: Record<string, string> = {}
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
@@ -45,7 +58,7 @@ export async function POST(req: NextRequest) {
   const email    = (body.email    ?? '').trim().toLowerCase()
   const name     = (body.name     ?? '').trim()
   const password = (body.password ?? '')
-  const role     = body.role === 'super_admin' ? 'super_admin' : 'admin'
+  const role     = (['super_admin', 'admin', 'member'].includes(body.role) ? body.role : 'member') as Role
 
   if (!email || !name || !password) {
     return NextResponse.json({ error: 'Email, name, and password are required' }, { status: 400 })
@@ -55,6 +68,26 @@ export async function POST(req: NextRequest) {
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: 'Invalid email address' }, { status: 400 })
+  }
+  // Only super_admin can create another super_admin
+  if (role === 'super_admin' && caller !== 'super_admin') {
+    return NextResponse.json({ error: 'Only super admins can create super admin accounts' }, { status: 403 })
+  }
+
+  // Enforce role limits
+  const limit = ROLE_LIMITS[role]
+  if (limit !== undefined) {
+    const supabase = db()
+    const { count } = await supabase
+      .from('admin_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', role)
+    if ((count ?? 0) >= limit) {
+      return NextResponse.json(
+        { error: `Maximum of ${limit} ${role}${limit !== 1 ? 's' : ''} allowed` },
+        { status: 409 }
+      )
+    }
   }
 
   const password_hash = await bcrypt.hash(password, BCRYPT_ROUNDS)
@@ -77,6 +110,11 @@ export async function POST(req: NextRequest) {
 // ── PUT — update user ─────────────────────────────────────────────────────────
 
 export async function PUT(req: NextRequest) {
+  const caller = callerRole(req)
+  if (caller === 'member') {
+    return NextResponse.json({ error: 'Members cannot manage users' }, { status: 403 })
+  }
+
   let body: Record<string, unknown> = {}
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
@@ -90,7 +128,7 @@ export async function PUT(req: NextRequest) {
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (name      !== undefined) update.name      = String(name).trim()
-  if (role      !== undefined) update.role      = role === 'super_admin' ? 'super_admin' : 'admin'
+  if (role      !== undefined) update.role      = ['super_admin', 'admin', 'member'].includes(role) ? role : 'member'
   if (is_active !== undefined) update.is_active = Boolean(is_active)
   if (password) {
     if (String(password).length < MIN_PASSWORD_LENGTH) {
@@ -111,4 +149,34 @@ export async function PUT(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true, user: data })
+}
+
+// ── DELETE — remove user ──────────────────────────────────────────────────────
+
+export async function DELETE(req: NextRequest) {
+  const caller = callerRole(req)
+  if (caller === 'member') {
+    return NextResponse.json({ error: 'Members cannot manage users' }, { status: 403 })
+  }
+
+  const id = req.nextUrl.searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'User ID required' }, { status: 400 })
+
+  const supabase = db()
+
+  // Prevent deleting the last super_admin
+  const { data: target } = await supabase.from('admin_users').select('role').eq('id', id).single()
+  if (target?.role === 'super_admin') {
+    const { count } = await supabase
+      .from('admin_users')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'super_admin')
+    if ((count ?? 0) <= 1) {
+      return NextResponse.json({ error: 'Cannot delete the last super admin' }, { status: 409 })
+    }
+  }
+
+  const { error } = await supabase.from('admin_users').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }

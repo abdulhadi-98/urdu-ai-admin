@@ -3,36 +3,34 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
-  LayoutDashboard,
-  MessageSquare,
-  Bell,
-  BookOpen,
-  Settings,
-  User,
-  LogOut,
-  Bot,
-  ChevronRight,
-  Puzzle,
-  Globe,
+  LayoutDashboard, MessageSquare, Bell, BookOpen,
+  Settings, LogOut, Bot, ChevronRight, Puzzle, Globe, FileText,
 } from 'lucide-react'
 import { logout } from '@/lib/auth'
 import { TENANT } from '@/lib/auth'
+import { useUser } from '@/lib/user-context'
+import { canAccess, roleLabel, roleColor, type Role } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 
-const navItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-  { label: 'Conversations', icon: MessageSquare, href: '/conversations' },
-  { label: 'Web Leads', icon: Globe, href: '/web-leads' },
-  { label: 'Notifications', icon: Bell, href: '/notifications' },
-  { label: 'Knowledge Base', icon: BookOpen, href: '/knowledge-base' },
-  { label: 'Prompts', icon: Settings, href: '/prompts' },
-  { label: 'Widget Config', icon: Puzzle, href: '/widget-config' },
-  { label: 'Settings', icon: User, href: '/settings' },
+const ALL_NAV = [
+  { label: 'Dashboard',     icon: LayoutDashboard, href: '/dashboard' },
+  { label: 'Conversations', icon: MessageSquare,   href: '/conversations' },
+  { label: 'Web Leads',     icon: Globe,           href: '/web-leads' },
+  { label: 'Notifications', icon: Bell,            href: '/notifications' },
+  { label: 'Knowledge Base',icon: BookOpen,        href: '/knowledge-base' },
+  { label: 'Prompts',       icon: FileText,        href: '/prompts' },
+  { label: 'Widget Config', icon: Puzzle,          href: '/widget-config' },
+  { label: 'Settings',      icon: Settings,        href: '/settings' },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
-  const router = useRouter()
+  const router   = useRouter()
+  const user     = useUser()
+  const role     = (user?.role ?? 'member') as Role
+
+  // Filter nav items to only those the current role can access
+  const navItems = ALL_NAV.filter((item) => canAccess(role, item.href))
 
   const handleLogout = async () => {
     await logout()
@@ -52,14 +50,31 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* Current user badge */}
+      {user && (
+        <div className="px-4 py-3 border-b border-dark-600">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0">
+              <span className="text-indigo-400 text-xs font-semibold">
+                {user.name.charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-white truncate">{user.name}</p>
+              <span className={cn('text-xs rounded-full px-1.5 py-0.5 border', roleColor(role))}>
+                {roleLabel(role)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
-            <Link
-              key={item.href}
-              href={item.href}
+            <Link key={item.href} href={item.href}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all group',
                 active
@@ -67,9 +82,7 @@ export default function Sidebar() {
                   : 'text-gray-400 hover:text-white hover:bg-dark-700'
               )}
             >
-              <item.icon
-                className={cn('w-4 h-4 shrink-0', active ? 'text-indigo-400' : 'text-gray-500 group-hover:text-gray-300')}
-              />
+              <item.icon className={cn('w-4 h-4 shrink-0', active ? 'text-indigo-400' : 'text-gray-500 group-hover:text-gray-300')} />
               <span className="flex-1">{item.label}</span>
               {active && <ChevronRight className="w-3.5 h-3.5 text-indigo-400/60" />}
             </Link>
@@ -77,12 +90,10 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Bottom: sign out */}
+      {/* Sign out */}
       <div className="px-3 py-4 border-t border-dark-600">
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all group"
-        >
+        <button onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all group">
           <LogOut className="w-4 h-4 text-gray-500 group-hover:text-red-400" />
           <span>Sign Out</span>
         </button>
