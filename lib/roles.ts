@@ -24,9 +24,12 @@ export const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
   member: [
     '/conversations',
     '/web-leads',
-    '/api/auth',          // needed for session checks
+    '/api/auth',                              // session checks
+    '/api/branding',                          // sidebar branding (layout)
+    '/api/conversations',                     // stream endpoint
     '/api/backend/api/admin/conversations',
     '/api/backend/api/admin/web-leads',
+    '/api/backend/api/admin/notifications',   // web-leads page actions
   ],
 }
 

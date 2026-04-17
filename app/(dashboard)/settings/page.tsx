@@ -98,12 +98,19 @@ export default function SettingsPage() {
   const [addError, setAddError]       = useState('')
   const [addSaving, setAddSaving]     = useState(false)
 
-  // ── Reset password ─────────────────────────────────────────────────────────
+  // ── Reset password (other users) ───────────────────────────────────────────
   const [resetId, setResetId]         = useState<string | null>(null)
   const [resetPw, setResetPw]         = useState('')
   const [showResetPw, setShowResetPw] = useState(false)
   const [resetSaving, setResetSaving] = useState(false)
   const [resetError, setResetError]   = useState('')
+
+  // ── My Account — change own password ───────────────────────────────────────
+  const [myPw, setMyPw]             = useState('')
+  const [showMyPw, setShowMyPw]     = useState(false)
+  const [myPwSaving, setMyPwSaving] = useState(false)
+  const [myPwError, setMyPwError]   = useState('')
+  const [myPwDone, setMyPwDone]     = useState(false)
 
   const cfg: Record<string, string> =
     typeof window !== 'undefined' ? (window as any).__APP_CONFIG__ ?? {} : {}
@@ -197,7 +204,25 @@ export default function SettingsPage() {
     finally { setResetSaving(false) }
   }
 
-  // ── Group users by role ────────────────────────────────────────────────────
+  // ── Change own password ────────────────────────────────────────────────────
+
+  const handleMyPwChange = async (e: React.FormEvent) => {
+    e.preventDefault(); setMyPwError(''); setMyPwDone(false)
+    if (!myPw || myPw.length < 8) { setMyPwError('Min 8 characters'); return }
+    setMyPwSaving(true)
+    try {
+      const res  = await fetch('/api/auth/register', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentUser?.id, password: myPw }),
+      })
+      if (!res.ok) { const d = await res.json(); setMyPwError(d.error || 'Failed'); return }
+      setMyPw(''); setMyPwDone(true)
+      setTimeout(() => setMyPwDone(false), 4000)
+    } catch { setMyPwError('Network error') }
+    finally { setMyPwSaving(false) }
+  }
+
+  // ── Group users by role (super_admin hidden from list) ─────────────────────
 
   const byRole = (role: Role) => users.filter(u => u.role === role)
   const offlineCount = services.filter(s => s.status === 'offline').length
@@ -209,6 +234,53 @@ export default function SettingsPage() {
     <div className="flex-1 flex flex-col overflow-hidden">
       <Header />
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+        {/* ── My Account ── */}
+        <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-dark-600">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-indigo-400" /> My Account
+            </h3>
+            <p className="text-xs text-gray-500 mt-0.5">Change your own password</p>
+          </div>
+          <form onSubmit={handleMyPwChange} className="px-5 py-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-indigo-500/15 flex items-center justify-center shrink-0">
+                <span className="text-indigo-400 text-sm font-semibold">
+                  {currentUser?.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-white">{currentUser?.name}</p>
+                <p className="text-xs text-gray-500">{currentUser?.email}</p>
+              </div>
+              <span className={cn('ml-auto text-xs rounded-full px-2.5 py-0.5 border', roleColor((currentUser?.role ?? 'member') as Role))}>
+                {roleLabel((currentUser?.role ?? 'member') as Role)}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative flex-1">
+                <input
+                  value={myPw}
+                  onChange={e => { setMyPw(e.target.value); setMyPwDone(false) }}
+                  type={showMyPw ? 'text' : 'password'}
+                  placeholder="New password (min 8 characters)"
+                  className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg px-3 pr-9 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                />
+                <button type="button" onClick={() => setShowMyPw(!showMyPw)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                  {showMyPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <button type="submit" disabled={myPwSaving}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:opacity-60 text-white text-xs font-medium rounded-lg transition-colors shrink-0">
+                {myPwSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Update'}
+              </button>
+            </div>
+            {myPwError && <p className="text-xs text-red-400">{myPwError}</p>}
+            {myPwDone  && <p className="text-xs text-green-400">Password updated successfully.</p>}
+          </form>
+        </div>
 
         {/* ── System Status ── */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
@@ -332,7 +404,7 @@ export default function SettingsPage() {
             </div>
           ) : (
             <div>
-              {(['super_admin', 'admin', 'member'] as Role[]).map((role) => {
+              {(['admin', 'member'] as Role[]).map((role) => {
                 const roleUsers = byRole(role)
                 const limit     = ROLE_LIMITS[role]
                 return (

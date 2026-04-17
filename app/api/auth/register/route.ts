@@ -110,10 +110,8 @@ export async function POST(req: NextRequest) {
 // ── PUT — update user ─────────────────────────────────────────────────────────
 
 export async function PUT(req: NextRequest) {
-  const caller = callerRole(req)
-  if (caller === 'member') {
-    return NextResponse.json({ error: 'Members cannot manage users' }, { status: 403 })
-  }
+  const caller   = callerRole(req)
+  const callerId = req.headers.get('x-admin-id') ?? ''
 
   let body: Record<string, unknown> = {}
   try { body = await req.json() } catch {
@@ -125,6 +123,16 @@ export async function PUT(req: NextRequest) {
   }
 
   if (!id) return NextResponse.json({ error: 'User ID required' }, { status: 400 })
+
+  const isSelf = id === callerId
+
+  // Members can only update their own password — nothing else
+  if (caller === 'member') {
+    if (!isSelf) return NextResponse.json({ error: 'Members can only update their own account' }, { status: 403 })
+    if (name !== undefined || role !== undefined || is_active !== undefined) {
+      return NextResponse.json({ error: 'Members can only change their own password' }, { status: 403 })
+    }
+  }
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (name      !== undefined) update.name      = String(name).trim()
