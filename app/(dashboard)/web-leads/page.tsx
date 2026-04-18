@@ -16,9 +16,11 @@ import {
   Search,
   MessageSquare,
   Mic,
+  Download,
 } from 'lucide-react'
 import { supabaseAdmin } from '@/lib/supabase'
 import Header from '@/components/layout/Header'
+import { useUser } from '@/lib/user-context'
 
 interface WebLead {
   id: string
@@ -62,6 +64,9 @@ const SENTIMENT_STYLES: Record<string, string> = {
 }
 
 export default function WebLeadsPage() {
+  const user = useUser()
+  const canDownload = user?.role === 'admin' || user?.role === 'super_admin'
+
   const [leads, setLeads] = useState<WebLead[]>([])
   const [conversations, setConversations] = useState<LeadConversation[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,6 +76,21 @@ export default function WebLeadsPage() {
   const [selected, setSelected] = useState<WebLead | null>(null)
   const [convLoading, setConvLoading] = useState(false)
   const [resolving, setResolving] = useState<string | null>(null)
+
+  const handleDownloadCSV = () => {
+    const rows = leads.filter(l => l.phone || l.name)
+    const csv = [
+      'Name,Phone',
+      ...rows.map(l => `"${(l.name || '').replace(/"/g, '""')}","${(l.phone || '').replace(/"/g, '""')}"`)
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `web-leads-${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -184,13 +204,24 @@ export default function WebLeadsPage() {
                 <h2 className="text-sm font-semibold text-white">Web Leads</h2>
                 <p className="text-xs text-gray-500 mt-0.5">{counts.pending} pending callback{counts.pending !== 1 ? 's' : ''}</p>
               </div>
-              <button
-                onClick={handleRefresh}
-                disabled={refreshing}
-                className="p-1.5 text-gray-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              </button>
+              <div className="flex items-center gap-1">
+                {canDownload && (
+                  <button
+                    onClick={handleDownloadCSV}
+                    title="Download CSV"
+                    className="p-1.5 text-gray-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  className="p-1.5 text-gray-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
             </div>
 
             {/* Search */}

@@ -22,11 +22,13 @@ import {
   UserCheck,
   Bot,
   HandMetal,
+  Download,
 } from 'lucide-react'
 import { supabaseAdmin, type Conversation } from '@/lib/supabase'
 import AudioPlayer from '@/components/AudioPlayer'
 import Header from '@/components/layout/Header'
 import { getInitials, getAvatarColor, formatPhone } from '@/lib/utils'
+import { useUser } from '@/lib/user-context'
 
 const API_URL = '/api/backend'
 
@@ -101,6 +103,9 @@ function groupByDate(convs: Conversation[]) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ConversationsPage() {
+  const user = useUser()
+  const canDownload = user?.role === 'admin' || user?.role === 'super_admin'
+
   const [allConversations, setAllConversations] = useState<Conversation[]>([])
   const [contacts, setContacts]                 = useState<ContactThread[]>([])
   const [selectedPhone, setSelectedPhone]       = useState<string | null>(null)
@@ -487,6 +492,21 @@ export default function ConversationsPage() {
 
   const handleRefresh = () => { setRefreshing(true); fetchConversations() }
 
+  const handleDownloadCSV = (source: 'whatsapp' | 'website' | 'all') => {
+    const rows = contacts.filter(c => source === 'all' || c.source === source)
+    const csv = [
+      'Name,Phone',
+      ...rows.map(c => `"${(c.name || '').replace(/"/g, '""')}","${(c.phone || '').replace(/"/g, '""')}"`)
+    ].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${source}-contacts-${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const selectedContact = contacts.find((c) => c.phone === selectedPhone)
   const selectedIsWeb   = selectedContact?.source === 'website'
   const isAIPaused      = selectedPhone ? pausedPhones.has(selectedPhone) : false
@@ -504,15 +524,26 @@ export default function ConversationsPage() {
 
           {/* Search */}
           <div className="p-3 pb-0 border-b border-dark-600">
-            <div className="relative mb-2.5">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Search contacts…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500"
-              />
+            <div className="flex items-center gap-2 mb-2.5">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <input
+                  type="text"
+                  placeholder="Search contacts…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              {canDownload && (
+                <button
+                  onClick={() => handleDownloadCSV(sourceFilter)}
+                  title="Download CSV"
+                  className="p-2 text-gray-400 hover:text-white hover:bg-dark-700 rounded-lg transition-colors flex-shrink-0"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             {/* Source filter tabs */}

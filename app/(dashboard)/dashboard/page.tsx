@@ -377,7 +377,7 @@ export default function DashboardPage() {
                   <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} width={70} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="count" name="Leads" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="count" name="Conversations" fill="#6366f1" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
