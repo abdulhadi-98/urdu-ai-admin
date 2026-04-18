@@ -81,7 +81,7 @@ export default function WebLeadsPage() {
     const rows = leads.filter(l => l.phone || l.name)
     const csv = [
       'Name,Phone',
-      ...rows.map(l => `"${(l.name || '').replace(/"/g, '""')}","${(l.phone || '').replace(/"/g, '""')}"`)
+      ...rows.map(l => `"${(l.name || '').replace(/"/g, '""')}","="${(l.phone || '').replace(/"/g, '""')}"`)
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)

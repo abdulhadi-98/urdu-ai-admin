@@ -496,7 +496,7 @@ export default function ConversationsPage() {
     const rows = contacts.filter(c => source === 'all' || c.source === source)
     const csv = [
       'Name,Phone',
-      ...rows.map(c => `"${(c.name || '').replace(/"/g, '""')}","${(c.phone || '').replace(/"/g, '""')}"`)
+      ...rows.map(c => `"${(c.name || '').replace(/"/g, '""')}","="${(c.phone || '').replace(/"/g, '""')}"`)
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -535,7 +535,7 @@ export default function ConversationsPage() {
                   className="w-full bg-dark-700 border border-dark-600 text-white placeholder-gray-600 rounded-lg pl-9 pr-4 py-2 text-sm focus:outline-none focus:border-indigo-500"
                 />
               </div>
-              {canDownload && (
+              {canDownload && sourceFilter === 'whatsapp' && (
                 <button
                   onClick={() => handleDownloadCSV(sourceFilter)}
                   title="Download CSV"
