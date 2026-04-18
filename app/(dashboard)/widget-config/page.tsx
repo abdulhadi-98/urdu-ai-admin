@@ -21,6 +21,10 @@ import {
   Bot,
   Sun,
   Moon,
+  Upload,
+  X,
+  Loader2,
+  ImageIcon,
 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import Header from '@/components/layout/Header'
@@ -455,6 +459,19 @@ export default function WidgetConfigPage() {
     }
   }
 
+  const handleAvatarDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleAvatarChange({ target: { files: [file] } } as unknown as React.ChangeEvent<HTMLInputElement>)
+  }
+
+  const handleRemoveAvatar = async () => {
+    setAvatarPreview(null)
+    setAvatarUrl(null)
+    await saveTenant({ widget_agent_avatar_url: null })
+    showToast('Avatar removed')
+  }
+
   const handleCopy = () => {
     navigator.clipboard.writeText(embedCode)
     setCopied(true)
@@ -558,39 +575,57 @@ export default function WidgetConfigPage() {
 
                     {/* Avatar */}
                     <div>
-                      <label className="block text-xs text-gray-500 mb-2">Agent Avatar</label>
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          className="w-14 h-14 rounded-full border-2 flex items-center justify-center overflow-hidden transition-opacity hover:opacity-80"
-                          style={{
-                            backgroundColor: config.brandColor + '22',
-                            borderColor: config.brandColor + '80',
-                          }}
-                        >
+                      <label className="block text-xs text-gray-500 mb-3 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        Agent Avatar
+                      </label>
+                      <div className="flex items-start gap-4">
+                        {/* Preview */}
+                        <div className="w-16 h-16 rounded-xl border-2 border-dashed border-dark-500 flex items-center justify-center shrink-0 overflow-hidden bg-dark-700">
                           {avatarPreview ? (
                             <img src={avatarPreview} className="w-full h-full object-cover" alt="avatar" />
                           ) : (
-                            <Bot className="w-6 h-6" style={{ color: config.brandColor }} />
+                            <Bot className="w-7 h-7 text-gray-600" />
                           )}
-                        </button>
-                        <div>
-                          <button
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={avatarUploading}
-                            className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
-                          >
-                            {avatarUploading ? 'Uploading & saving…' : avatarUrl ? 'Change image' : 'Upload image'}
-                          </button>
-                          <p className="text-xs text-gray-600 mt-0.5">PNG, JPG · max 2 MB · saves automatically</p>
                         </div>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={handleAvatarChange}
-                        />
+
+                        <div className="flex-1">
+                          {/* Drop zone */}
+                          <div
+                            onDrop={handleAvatarDrop}
+                            onDragOver={(e) => e.preventDefault()}
+                            onClick={() => fileInputRef.current?.click()}
+                            className="border-2 border-dashed border-dark-500 hover:border-indigo-500/50 rounded-xl p-4 cursor-pointer transition-colors text-center"
+                          >
+                            {avatarUploading ? (
+                              <div className="flex items-center justify-center gap-2 text-sm text-gray-400">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Uploading…
+                              </div>
+                            ) : (
+                              <>
+                                <Upload className="w-5 h-5 text-gray-500 mx-auto mb-1" />
+                                <p className="text-xs text-gray-400">Click or drag to upload</p>
+                                <p className="text-xs text-gray-600 mt-0.5">PNG, JPG — max 2 MB</p>
+                              </>
+                            )}
+                          </div>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleAvatarChange}
+                          />
+                          {avatarUrl && (
+                            <button
+                              onClick={handleRemoveAvatar}
+                              className="mt-2 text-xs text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"
+                            >
+                              <X className="w-3 h-3" /> Remove avatar
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
