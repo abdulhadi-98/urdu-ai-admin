@@ -78,7 +78,7 @@ function StatusBadge({ status }: { status: ServiceStatus }) {
 
 export default function SettingsPage() {
   const currentUser = useUser()
-  const canManage   = currentUser?.role === 'super_admin' || currentUser?.role === 'admin'
+  const canManage   = currentUser?.role === 'super_admin'
   const branding    = useBranding()
 
   // ── System status ──────────────────────────────────────────────────────────
@@ -339,8 +339,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* ── Users ── */}
-        <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
+        {/* ── Users — super_admin only ── */}
+        {canManage && <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-dark-600 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
@@ -508,7 +508,7 @@ export default function SettingsPage() {
               })}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* ── Tenant Info ── */}
         <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">

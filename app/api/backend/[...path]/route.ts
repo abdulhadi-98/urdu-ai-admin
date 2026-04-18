@@ -29,6 +29,10 @@ async function proxy(req: NextRequest, { params }: { params: { path: string[] } 
     if (!SKIP.has(key.toLowerCase())) headers[key] = value
   })
 
+  // Inject shared secret so the backend can verify requests come from this proxy
+  const adminKey = process.env.ADMIN_API_KEY
+  if (adminKey) headers['x-admin-key'] = adminKey
+
   const hasBody = !['GET', 'HEAD'].includes(req.method)
   const body = hasBody ? await req.arrayBuffer() : undefined
 

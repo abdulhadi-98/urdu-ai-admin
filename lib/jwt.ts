@@ -4,12 +4,13 @@
  */
 import { SignJWT, jwtVerify } from 'jose'
 
-const SECRET = new TextEncoder().encode(
-  process.env.ADMIN_JWT_SECRET || 'change-this-secret-in-production'
-)
+const rawSecret = process.env.ADMIN_JWT_SECRET
+if (!rawSecret) throw new Error('ADMIN_JWT_SECRET environment variable is not set')
+
+const SECRET = new TextEncoder().encode(rawSecret)
 
 const ALGORITHM = 'HS256'
-const SESSION_HOURS = 8
+const SESSION_HOURS = 1
 
 export interface AdminPayload {
   sub:   string   // admin_users.id
@@ -42,4 +43,4 @@ export async function verifyToken(token: string): Promise<AdminPayload | null> {
 }
 
 export const COOKIE_NAME    = 'admin_token'
-export const COOKIE_MAX_AGE = SESSION_HOURS * 3600   // seconds
+export const COOKIE_MAX_AGE = SESSION_HOURS * 3600   // 1 hour in seconds

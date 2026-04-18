@@ -55,6 +55,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return () => clearInterval(interval)
   }, [router, ready])
 
+  // Inactivity logout — 15 minutes of no user interaction
+  useEffect(() => {
+    if (!ready) return
+    const TIMEOUT_MS = 15 * 60 * 1000
+    let timer: ReturnType<typeof setTimeout>
+
+    const reset = () => {
+      clearTimeout(timer)
+      timer = setTimeout(async () => {
+        await fetch('/api/auth/logout', { method: 'POST' })
+        router.replace('/login')
+      }, TIMEOUT_MS)
+    }
+
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart']
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }))
+    reset()
+
+    return () => {
+      clearTimeout(timer)
+      events.forEach((e) => window.removeEventListener(e, reset))
+    }
+  }, [router, ready])
+
+  // Network change — re-validate session when connection restores
+  useEffect(() => {
+    if (!ready) return
+    const onOnline = () => {
+      getSession().then((s) => { if (!s) router.replace('/login') })
+    }
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [router, ready])
+
   if (!ready) {
     return (
       <div className="min-h-screen bg-dark-900 flex items-center justify-center">

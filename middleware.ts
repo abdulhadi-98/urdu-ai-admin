@@ -9,9 +9,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { canAccess, type Role } from '@/lib/roles'
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.ADMIN_JWT_SECRET || 'change-this-secret-in-production'
-)
+const _jwtRaw = process.env.ADMIN_JWT_SECRET
+if (!_jwtRaw) throw new Error('ADMIN_JWT_SECRET environment variable is not set')
+const JWT_SECRET = new TextEncoder().encode(_jwtRaw)
 
 const PUBLIC_PATHS = ['/login', '/api/auth/login', '/api/auth/logout', '/_next', '/favicon.ico']
 

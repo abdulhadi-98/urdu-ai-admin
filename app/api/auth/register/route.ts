@@ -32,7 +32,10 @@ function callerRole(req: NextRequest): Role {
 
 // ── GET — list all users ──────────────────────────────────────────────────────
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (callerRole(req) !== 'super_admin') {
+    return NextResponse.json({ error: 'Only super admins can view user list' }, { status: 403 })
+  }
   const supabase = db()
   const { data, error } = await supabase
     .from('admin_users')
@@ -46,8 +49,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const caller = callerRole(req)
-  if (caller === 'member') {
-    return NextResponse.json({ error: 'Members cannot manage users' }, { status: 403 })
+  if (caller !== 'super_admin') {
+    return NextResponse.json({ error: 'Only super admins can create users' }, { status: 403 })
   }
 
   let body: Record<string, string> = {}
@@ -126,11 +129,11 @@ export async function PUT(req: NextRequest) {
 
   const isSelf = id === callerId
 
-  // Members can only update their own password — nothing else
-  if (caller === 'member') {
-    if (!isSelf) return NextResponse.json({ error: 'Members can only update their own account' }, { status: 403 })
+  // Non-super_admin can only change their own password — no role/status changes
+  if (caller !== 'super_admin') {
+    if (!isSelf) return NextResponse.json({ error: 'You can only update your own account' }, { status: 403 })
     if (name !== undefined || role !== undefined || is_active !== undefined) {
-      return NextResponse.json({ error: 'Members can only change their own password' }, { status: 403 })
+      return NextResponse.json({ error: 'Only super admins can change roles or account status' }, { status: 403 })
     }
   }
 
@@ -163,8 +166,8 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const caller = callerRole(req)
-  if (caller === 'member') {
-    return NextResponse.json({ error: 'Members cannot manage users' }, { status: 403 })
+  if (caller !== 'super_admin') {
+    return NextResponse.json({ error: 'Only super admins can delete users' }, { status: 403 })
   }
 
   const id = req.nextUrl.searchParams.get('id')
