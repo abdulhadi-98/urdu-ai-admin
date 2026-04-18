@@ -42,6 +42,7 @@ interface WidgetConfig {
   voiceEnabled: boolean
   autoOpenSeconds: number
   maxVoiceSessions: number
+  whatsappNumber: string
   testMode: boolean
 }
 
@@ -55,6 +56,7 @@ const DEFAULT_CONFIG: WidgetConfig = {
   voiceEnabled: true,
   autoOpenSeconds: 0,
   maxVoiceSessions: 10,
+  whatsappNumber: '',
   testMode: false,
 }
 
@@ -362,6 +364,7 @@ export default function WidgetConfigPage() {
           voiceEnabled:      data.widget_voice_enabled     ?? prev.voiceEnabled,
           autoOpenSeconds:   data.widget_auto_open_seconds ?? prev.autoOpenSeconds,
           maxVoiceSessions:  data.widget_max_voice_sessions ?? prev.maxVoiceSessions,
+          whatsappNumber:    data.widget_whatsapp_number   ?? prev.whatsappNumber,
         }))
         // Load existing avatar
         if (data.widget_agent_avatar_url) {
@@ -405,6 +408,7 @@ export default function WidgetConfigPage() {
         widget_voice_enabled:        config.voiceEnabled,
         widget_auto_open_seconds:    config.autoOpenSeconds,
         widget_max_voice_sessions:   config.maxVoiceSessions,
+        widget_whatsapp_number:      config.whatsappNumber || null,
       }
       if (avatarUrl !== null) payload.widget_agent_avatar_url = avatarUrl
 
@@ -773,6 +777,29 @@ export default function WidgetConfigPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* WhatsApp */}
+              <div className="bg-dark-800 border border-dark-600 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-dark-600">
+                  <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                    <svg viewBox="0 0 32 32" className="w-4 h-4 fill-green-400"><path d="M16 3C9.373 3 4 8.373 4 15c0 2.385.668 4.61 1.832 6.5L4 29l7.697-1.817A12.94 12.94 0 0016 28c6.627 0 12-5.373 12-12S22.627 3 16 3zm0 2c5.523 0 10 4.477 10 10s-4.477 10-10 10c-1.97 0-3.805-.572-5.357-1.557l-.38-.24-4.572 1.078 1.1-4.46-.263-.408A9.953 9.953 0 016 15c0-5.523 4.477-10 10-10zm-3.5 5c-.277 0-.584.077-.84.332-.255.255-1.16 1.134-1.16 2.766 0 1.633 1.187 3.21 1.352 3.435.164.225 2.318 3.74 5.724 5.098 3.406 1.358 3.406.906 4.02.849.614-.057 1.982-.812 2.263-1.596.28-.784.28-1.457.196-1.596-.084-.14-.307-.224-.644-.392-.336-.168-1.982-.978-2.29-1.09-.307-.112-.532-.168-.756.168-.224.336-.867 1.09-1.064 1.315-.196.224-.392.252-.728.084-.336-.168-1.418-.523-2.7-1.666-1-.892-1.676-1.993-1.873-2.33-.196-.336-.02-.518.148-.685.152-.152.336-.392.504-.588.168-.196.224-.336.336-.56.112-.225.056-.42-.028-.588-.084-.168-.74-1.81-1.036-2.47-.27-.618-.55-.537-.756-.547L12.5 10z"/></svg>
+                    WhatsApp Button
+                  </h3>
+                </div>
+                <div className="p-5 space-y-3">
+                  <p className="text-xs text-gray-500">Add a WhatsApp direct-link button below the chat bubble. Leave blank to hide it.</p>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1.5">WhatsApp Number</label>
+                    <input
+                      type="tel"
+                      placeholder="e.g. 923001234567 (with country code, no +)"
+                      value={config.whatsappNumber}
+                      onChange={(e) => update('whatsappNumber', e.target.value)}
+                      className="w-full bg-dark-700 border border-dark-500 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
                 </div>
               </div>
 
