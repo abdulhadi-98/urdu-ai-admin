@@ -78,7 +78,7 @@ function StatusBadge({ status }: { status: ServiceStatus }) {
 
 export default function SettingsPage() {
   const currentUser = useUser()
-  const canManage   = currentUser?.role === 'super_admin'
+  const canManage   = currentUser?.role === 'super_admin' || currentUser?.role === 'admin'
   const branding    = useBranding()
 
   // ── System status ──────────────────────────────────────────────────────────
@@ -450,7 +450,7 @@ export default function SettingsPage() {
                               <p className="text-xs text-gray-600 mt-0.5">Last login: {new Date(user.last_login_at).toLocaleDateString()}</p>
                             )}
                           </div>
-                          {canManage && user.id !== currentUser?.id && (
+                          {canManage && user.id !== currentUser?.id && !(currentUser?.role === 'admin' && user.role === 'super_admin') && (
                             <div className="flex items-center gap-1 shrink-0">
                               <button onClick={() => { setResetId(user.id); setResetPw(''); setResetError('') }}
                                 title="Reset password"

@@ -339,11 +339,6 @@ export default function ConversationsPage() {
     setThread(msgs)
   }, [selectedPhone, allConversations, contacts])
 
-  // ── Auto-scroll ─────────────────────────────────────────────────────────────
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [thread])
-
   // ── Countdown ticker for takeover inactivity ────────────────────────────────
   useEffect(() => {
     if (!selectedPhone) { setCountdown(''); return }

@@ -33,14 +33,18 @@ function callerRole(req: NextRequest): Role {
 // ── GET — list all users ──────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
-  if (callerRole(req) !== 'super_admin') {
-    return NextResponse.json({ error: 'Only super admins can view user list' }, { status: 403 })
+  const caller = callerRole(req)
+  if (caller !== 'super_admin' && caller !== 'admin') {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
   const supabase = db()
-  const { data, error } = await supabase
+  let query = supabase
     .from('admin_users')
     .select('id, email, name, role, is_active, failed_attempts, locked_until, last_login_at, created_at')
     .order('created_at', { ascending: true })
+  // admins cannot see super_admin accounts
+  if (caller === 'admin') query = query.neq('role', 'super_admin')
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ users: data ?? [] })
 }
@@ -49,8 +53,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const caller = callerRole(req)
-  if (caller !== 'super_admin') {
-    return NextResponse.json({ error: 'Only super admins can create users' }, { status: 403 })
+  if (caller !== 'super_admin' && caller !== 'admin') {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
   let body: Record<string, string> = {}
@@ -129,11 +133,22 @@ export async function PUT(req: NextRequest) {
 
   const isSelf = id === callerId
 
-  // Non-super_admin can only change their own password — no role/status changes
-  if (caller !== 'super_admin') {
+  if (caller === 'member') {
+    // Members can only change their own password
     if (!isSelf) return NextResponse.json({ error: 'You can only update your own account' }, { status: 403 })
     if (name !== undefined || role !== undefined || is_active !== undefined) {
-      return NextResponse.json({ error: 'Only super admins can change roles or account status' }, { status: 403 })
+      return NextResponse.json({ error: 'Only admins can change roles or account status' }, { status: 403 })
+    }
+  } else if (caller === 'admin') {
+    // Admins cannot touch super_admin accounts
+    const supabase = db()
+    const { data: target } = await supabase.from('admin_users').select('role').eq('id', id).single()
+    if (target?.role === 'super_admin') {
+      return NextResponse.json({ error: 'Admins cannot modify super admin accounts' }, { status: 403 })
+    }
+    // Admins cannot assign super_admin role
+    if (role === 'super_admin') {
+      return NextResponse.json({ error: 'Only super admins can assign the super admin role' }, { status: 403 })
     }
   }
 
@@ -166,8 +181,8 @@ export async function PUT(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const caller = callerRole(req)
-  if (caller !== 'super_admin') {
-    return NextResponse.json({ error: 'Only super admins can delete users' }, { status: 403 })
+  if (caller !== 'super_admin' && caller !== 'admin') {
+    return NextResponse.json({ error: 'Access denied' }, { status: 403 })
   }
 
   const id = req.nextUrl.searchParams.get('id')
@@ -175,9 +190,14 @@ export async function DELETE(req: NextRequest) {
 
   const supabase = db()
 
-  // Prevent deleting the last super_admin
   const { data: target } = await supabase.from('admin_users').select('role').eq('id', id).single()
+
+  // Admins cannot delete super_admin accounts
   if (target?.role === 'super_admin') {
+    if (caller !== 'super_admin') {
+      return NextResponse.json({ error: 'Admins cannot delete super admin accounts' }, { status: 403 })
+    }
+    // Prevent deleting the last super_admin
     const { count } = await supabase
       .from('admin_users')
       .select('id', { count: 'exact', head: true })
