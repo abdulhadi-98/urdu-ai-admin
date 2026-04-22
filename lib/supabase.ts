@@ -55,6 +55,7 @@ export type Conversation = {
   source?: 'whatsapp' | 'website' | string | null
   visitor_id?: string | null
   page_url?: string | null
+  visit_requested?: boolean | null
 }
 
 export type Notification = {

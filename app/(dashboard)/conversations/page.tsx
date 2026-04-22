@@ -73,6 +73,7 @@ type ContactThread = {
   latestMessage: string
   latestTime: string
   hasEscalation: boolean
+  hasVisitRequest: boolean
 }
 
 function formatMsgTime(iso: string): string {
@@ -163,7 +164,8 @@ export default function ConversationsPage() {
           isLinkedLead: isLinkedLead(latest),
           latestMessage: latest.user_message ?? (latest.is_voice ? '🎤 Voice message' : latest.ai_response ?? ''),
           latestTime:   latest.created_at,
-          hasEscalation: msgs.some((m) => m.needs_human),
+          hasEscalation:   msgs.some((m) => m.needs_human),
+          hasVisitRequest: msgs.some((m) => m.visit_requested),
         } as ContactThread
       })
       .sort((a, b) => (b.latestTime > a.latestTime ? 1 : -1))
@@ -695,6 +697,13 @@ export default function ConversationsPage() {
                           : 'bg-blue-500/15 text-blue-400 border-blue-500/20'
                       }`}>
                         {selectedContact?.isLinkedLead ? 'Linked Lead' : 'Website Visitor'}
+                      </span>
+                    )}
+
+                    {selectedContact?.hasVisitRequest && (
+                      <span className="flex items-center gap-1 text-[10px] text-green-400 bg-green-500/10 border border-green-500/20 rounded-full px-2 py-0.5">
+                        <CheckCircle className="w-3 h-3" />
+                        Visit Requested
                       </span>
                     )}
 
