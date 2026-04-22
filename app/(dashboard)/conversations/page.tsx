@@ -23,6 +23,9 @@ import {
   Bot,
   HandMetal,
   Download,
+  Paperclip,
+  FileVideo,
+  FileImage,
 } from 'lucide-react'
 import { supabaseAdmin, type Conversation } from '@/lib/supabase'
 import AudioPlayer from '@/components/AudioPlayer'
@@ -127,6 +130,10 @@ export default function ConversationsPage() {
   const [linkName, setLinkName]         = useState('')
   const [linking, setLinking]           = useState(false)
   const [linkSuccess, setLinkSuccess]   = useState(false)
+
+  // File attachment
+  const [attachedFile, setAttachedFile]     = useState<File | null>(null)
+  const fileInputRef                        = useRef<HTMLInputElement>(null)
 
   // Human takeover
   const [pausedPhones, setPausedPhones]     = useState<Set<string>>(new Set())
@@ -448,6 +455,26 @@ export default function ConversationsPage() {
       setTimeout(fetchConversations, 1_000)
     } catch {
       setSendError('Failed to send voice note.')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const sendMedia = async (file: File) => {
+    if (!selectedPhone) return
+    setSending(true)
+    setSendError('')
+    try {
+      const fd = new FormData()
+      fd.append('file', file, file.name)
+      fd.append('phone', selectedPhone)
+      const res = await fetch(`${API_URL}/api/admin/send-media`, { method: 'POST', body: fd })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setAttachedFile(null)
+      if (selectedPhone && pausedPhones.has(selectedPhone)) startInactivityTimer(selectedPhone)
+      setTimeout(fetchConversations, 800)
+    } catch {
+      setSendError('Failed to send media.')
     } finally {
       setSending(false)
     }
@@ -886,7 +913,22 @@ export default function ConversationsPage() {
                         {msg.is_admin && (msg.ai_response || msg.ai_voice_note_url) && (
                           <div className="flex items-end gap-2 justify-end">
                             <div className="max-w-[65%]">
-                              {msg.ai_voice_note_url ? (
+                              {msg.ai_voice_note_url && msg.ai_response?.startsWith('[MEDIA:image') ? (
+                                <div className="rounded-2xl rounded-br-sm overflow-hidden border border-indigo-500/30">
+                                  <img src={msg.ai_voice_note_url} alt="sent image" className="max-w-[280px] max-h-[280px] object-cover" />
+                                </div>
+                              ) : msg.ai_voice_note_url && msg.ai_response?.startsWith('[MEDIA:video') ? (
+                                <div className="rounded-2xl rounded-br-sm overflow-hidden border border-indigo-500/30">
+                                  <video src={msg.ai_voice_note_url} controls className="max-w-[280px] max-h-[280px]" />
+                                </div>
+                              ) : msg.ai_voice_note_url && msg.ai_response?.startsWith('[MEDIA:') ? (
+                                <div className="bg-indigo-500/15 border border-indigo-500/30 rounded-2xl rounded-br-sm px-4 py-3 flex items-center gap-2">
+                                  <FileVideo className="w-4 h-4 text-indigo-300 shrink-0" />
+                                  <a href={msg.ai_voice_note_url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-200 underline truncate max-w-[200px]">
+                                    {msg.ai_response.replace(/^\[MEDIA:[^\]]+\]\s*/, '')}
+                                  </a>
+                                </div>
+                              ) : msg.ai_voice_note_url ? (
                                 <AudioPlayer src={msg.ai_voice_note_url} text={msg.ai_response ?? 'Voice note'} transcription={msg.ai_response ?? undefined} className="min-w-[250px]" />
                               ) : (
                                 <div className="bg-indigo-500/15 border border-indigo-500/30 rounded-2xl rounded-br-sm px-4 py-2.5">
@@ -968,6 +1010,30 @@ export default function ConversationsPage() {
                 </div>
               )}
 
+              {/* File preview */}
+              {attachedFile && (
+                <div className="flex items-center gap-2 mb-2 bg-dark-700 border border-dark-500 rounded-xl px-3 py-2">
+                  {attachedFile.type.startsWith('image/') ? (
+                    <FileImage className="w-4 h-4 text-indigo-400 shrink-0" />
+                  ) : (
+                    <FileVideo className="w-4 h-4 text-indigo-400 shrink-0" />
+                  )}
+                  <span className="text-xs text-gray-300 truncate flex-1">{attachedFile.name}</span>
+                  <span className="text-xs text-gray-500 shrink-0">{(attachedFile.size / 1024 / 1024).toFixed(1)} MB</span>
+                  <button onClick={() => setAttachedFile(null)} className="text-gray-500 hover:text-gray-300">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) setAttachedFile(f); e.target.value = '' }}
+              />
+
               <div className="flex items-end gap-2">
                 <textarea
                   value={replyText}
@@ -984,6 +1050,18 @@ export default function ConversationsPage() {
                   style={{ minHeight: '42px' }}
                 />
                 <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!isAIPaused || sending}
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
+                    isAIPaused
+                      ? 'bg-dark-700 hover:bg-dark-600 border border-dark-500'
+                      : 'bg-dark-800 border border-dark-700 cursor-not-allowed opacity-40'
+                  }`}
+                  title={!isAIPaused ? 'Take over to attach files' : 'Attach image or video'}
+                >
+                  <Paperclip className="w-4 h-4 text-gray-400" />
+                </button>
+                <button
                   onClick={recording ? stopRecording : startRecording}
                   disabled={sending || !isAIPaused}
                   className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
@@ -998,8 +1076,8 @@ export default function ConversationsPage() {
                   {recording ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-gray-400" />}
                 </button>
                 <button
-                  onClick={sendTextMessage}
-                  disabled={sending || !replyText.trim() || !isAIPaused}
+                  onClick={() => attachedFile ? sendMedia(attachedFile) : sendTextMessage()}
+                  disabled={sending || (!replyText.trim() && !attachedFile) || !isAIPaused}
                   className="w-10 h-10 rounded-xl bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-colors shrink-0"
                 >
                   {sending ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Send className="w-4 h-4 text-white" />}
