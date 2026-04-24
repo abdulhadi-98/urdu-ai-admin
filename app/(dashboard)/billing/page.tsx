@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { useUser } from '@/lib/user-context'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? ''
+const API_BASE = '/api/backend'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -77,8 +77,8 @@ function AdminBillingView({ tenantSlug }: { tenantSlug: string }) {
   useEffect(() => {
     setLoading(true)
     Promise.all([
-      fetch(`${API_URL}/api/admin/billing/usage/${tenantSlug}`).then(r => r.json()),
-      fetch(`${API_URL}/api/admin/billing/invoices/${tenantSlug}`).then(r => r.json()),
+      fetch(`${API_BASE}/api/admin/billing/usage/${tenantSlug}`).then(r => r.json()),
+      fetch(`${API_BASE}/api/admin/billing/invoices/${tenantSlug}`).then(r => r.json()),
     ]).then(([u, inv]) => {
       setUsage(u.data ?? null)
       setInvoices(inv.data ?? [])
@@ -221,7 +221,7 @@ function SuperAdminBillingView() {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const res  = await fetch(`${API_URL}/api/admin/billing/plans`)
+      const res  = await fetch(`${API_BASE}/api/admin/billing/plans`)
       const json = await res.json()
       const data: TenantUsage[] = (json.data ?? []).filter(Boolean)
       setTenants(data)
@@ -234,8 +234,8 @@ function SuperAdminBillingView() {
   const fetchTenant = useCallback(async (slug: string) => {
     if (!slug) return
     const [u, inv] = await Promise.all([
-      fetch(`${API_URL}/api/admin/billing/usage/${slug}`).then(r => r.json()),
-      fetch(`${API_URL}/api/admin/billing/invoices/${slug}`).then(r => r.json()),
+      fetch(`${API_BASE}/api/admin/billing/usage/${slug}`).then(r => r.json()),
+      fetch(`${API_BASE}/api/admin/billing/invoices/${slug}`).then(r => r.json()),
     ])
     const d = u.data as TenantUsage | null
     setUsage(d)
@@ -249,7 +249,7 @@ function SuperAdminBillingView() {
   const saveLimits = async () => {
     setSaving('limits')
     try {
-      await fetch(`${API_URL}/api/admin/billing/plans/${selectedSlug}`, {
+      await fetch(`${API_BASE}/api/admin/billing/plans/${selectedSlug}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ voiceMinutesLimit: editVoice, textConversationsLimit: editText }),
       })
@@ -260,7 +260,7 @@ function SuperAdminBillingView() {
   const doTopup = async () => {
     setSaving('topup')
     try {
-      await fetch(`${API_URL}/api/admin/billing/topup/${selectedSlug}`, {
+      await fetch(`${API_BASE}/api/admin/billing/topup/${selectedSlug}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ minutesToAdd: topupMins, note: topupNote || null }),
       })
@@ -272,7 +272,7 @@ function SuperAdminBillingView() {
   const toggleLock = async (lock: boolean) => {
     setSaving('lock')
     try {
-      await fetch(`${API_URL}/api/admin/billing/lock/${selectedSlug}`, { method: lock ? 'POST' : 'DELETE' })
+      await fetch(`${API_BASE}/api/admin/billing/lock/${selectedSlug}`, { method: lock ? 'POST' : 'DELETE' })
       await fetchTenant(selectedSlug)
     } finally { setSaving(null) }
   }
@@ -287,14 +287,14 @@ function SuperAdminBillingView() {
       fd.append('amount', invAmount)
       fd.append('currency', invCurrency)
       fd.append('isPaid', String(invPaid))
-      await fetch(`${API_URL}/api/admin/billing/invoices/${selectedSlug}`, { method: 'POST', body: fd })
+      await fetch(`${API_BASE}/api/admin/billing/invoices/${selectedSlug}`, { method: 'POST', body: fd })
       setUploadOpen(false); setInvoiceFile(null); setInvPeriod(''); setInvAmount(''); setInvPaid(false)
       await fetchTenant(selectedSlug)
     } finally { setSaving(null) }
   }
 
   const toggleInvoicePaid = async (id: string, paid: boolean) => {
-    await fetch(`${API_URL}/api/admin/billing/invoices/${id}`, {
+    await fetch(`${API_BASE}/api/admin/billing/invoices/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isPaid: paid }),
     })
@@ -310,23 +310,40 @@ function SuperAdminBillingView() {
   return (
     <div className="max-w-3xl mx-auto space-y-4">
       {/* Tenant selector */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <label className="text-xs text-gray-500">Tenant</label>
-        <select
-          value={selectedSlug}
-          onChange={(e) => setSelectedSlug(e.target.value)}
-          className="bg-dark-700 border border-dark-500 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500"
-        >
-          {tenants.map((t) => (
-            <option key={t.plan.tenant_slug} value={t.plan.tenant_slug}>
-              {t.plan.tenant_slug}
-            </option>
-          ))}
-        </select>
-        <button onClick={() => { fetchAll(); if (selectedSlug) fetchTenant(selectedSlug) }}
-          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white border border-dark-600 bg-dark-800 rounded-lg px-3 py-1.5 transition-colors">
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
-        </button>
+      <div className="bg-dark-800 border border-dark-600 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Select Tenant</span>
+          <button onClick={() => { fetchAll(); if (selectedSlug) fetchTenant(selectedSlug) }}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white border border-dark-600 bg-dark-700 hover:bg-dark-600 rounded-lg px-2.5 py-1.5 transition-colors">
+            <RefreshCw className="w-3 h-3" /> Refresh
+          </button>
+        </div>
+        {tenants.length === 0 ? (
+          <p className="text-xs text-gray-600">No tenants found. Run the billing migration in Supabase first.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {tenants.map((t) => {
+              const isSelected = t.plan.tenant_slug === selectedSlug
+              const pct = t.voiceUsedPct ?? 0
+              const locked = t.isLocked
+              return (
+                <button
+                  key={t.plan.tenant_slug}
+                  onClick={() => setSelectedSlug(t.plan.tenant_slug)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
+                    isSelected
+                      ? 'bg-indigo-500/15 border-indigo-500/40 text-white'
+                      : 'bg-dark-700 border-dark-500 text-gray-400 hover:text-white hover:border-dark-400'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${locked ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-green-500'}`} />
+                  <span className="capitalize font-medium">{t.plan.tenant_slug}</span>
+                  {locked && <Lock className="w-3 h-3 text-red-400 shrink-0" />}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {usage && (
