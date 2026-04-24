@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, MessageSquare, Bell, BookOpen,
-  Settings, LogOut, Bot, ChevronRight, Puzzle, Globe, FileText, Palette,
+  Settings, LogOut, Bot, ChevronRight, Puzzle, Globe, FileText, Palette, CreditCard,
 } from 'lucide-react'
 import { logout } from '@/lib/auth'
 import { useUser } from '@/lib/user-context'
@@ -22,6 +22,7 @@ const ALL_NAV = [
   { label: 'Prompts',       icon: FileText,        href: '/prompts' },
   { label: 'Widget Config', icon: Puzzle,          href: '/widget-config' },
   { label: 'Branding',      icon: Palette,         href: '/branding' },
+  { label: 'Billing',       icon: CreditCard,      href: '/billing' },
   { label: 'Settings',      icon: Settings,        href: '/settings' },
 ]
 
