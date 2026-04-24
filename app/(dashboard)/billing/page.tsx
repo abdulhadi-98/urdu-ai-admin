@@ -7,6 +7,7 @@ import {
   ExternalLink, CreditCard, Calendar,
 } from 'lucide-react'
 import { useUser } from '@/lib/user-context'
+import { useBranding } from '@/lib/branding-context'
 
 const API_BASE = '/api/backend'
 
@@ -198,6 +199,10 @@ function AdminBillingView({ tenantSlug }: { tenantSlug: string }) {
 // ── Super admin view (full control) ──────────────────────────────────────────
 
 function SuperAdminBillingView() {
+  const branding = useBranding()
+  const displayName = (slug: string) =>
+    slug === branding.slug && branding.orgName ? branding.orgName : slug
+
   const [tenants,       setTenants]       = useState<TenantUsage[]>([])
   const [selectedSlug,  setSelectedSlug]  = useState<string>('')
   const [usage,         setUsage]         = useState<TenantUsage | null>(null)
@@ -337,7 +342,7 @@ function SuperAdminBillingView() {
                   }`}
                 >
                   <span className={`w-2 h-2 rounded-full shrink-0 ${locked ? 'bg-red-500' : pct >= 80 ? 'bg-yellow-500' : 'bg-green-500'}`} />
-                  <span className="capitalize font-medium">{t.plan.tenant_slug}</span>
+                  <span className="font-medium">{displayName(t.plan.tenant_slug)}</span>
                   {locked && <Lock className="w-3 h-3 text-red-400 shrink-0" />}
                 </button>
               )
@@ -354,7 +359,7 @@ function SuperAdminBillingView() {
           }`}>
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm font-semibold text-white capitalize">{selectedSlug}</span>
+                <span className="text-sm font-semibold text-white">{displayName(selectedSlug)}</span>
                 {usage.isLocked ? (
                   <span className="flex items-center gap-1 text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
                     <Lock className="w-3 h-3" /> Locked
@@ -486,7 +491,7 @@ function SuperAdminBillingView() {
       {topupOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-dark-800 border border-dark-600 rounded-2xl p-6 w-full max-w-sm space-y-4">
-            <h2 className="text-sm font-semibold text-white">Top Up — <span className="text-indigo-400 capitalize">{selectedSlug}</span></h2>
+            <h2 className="text-sm font-semibold text-white">Top Up — <span className="text-indigo-400">{displayName(selectedSlug)}</span></h2>
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Minutes to add</label>
@@ -517,7 +522,7 @@ function SuperAdminBillingView() {
       {uploadOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-dark-800 border border-dark-600 rounded-2xl p-6 w-full max-w-sm space-y-4">
-            <h2 className="text-sm font-semibold text-white">Upload Invoice — <span className="text-indigo-400 capitalize">{selectedSlug}</span></h2>
+            <h2 className="text-sm font-semibold text-white">Upload Invoice — <span className="text-indigo-400">{displayName(selectedSlug)}</span></h2>
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Invoice file (PDF/image)</label>
