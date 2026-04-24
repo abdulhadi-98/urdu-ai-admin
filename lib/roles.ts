@@ -17,6 +17,7 @@ export const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
     '/web-leads',
     '/notifications',
     '/widget-config',
+    '/billing',
     '/settings',
     '/api',
   ],
